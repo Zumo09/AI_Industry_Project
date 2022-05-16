@@ -41,5 +41,6 @@ class Marconi100Dataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[pd.DataFrame, pd.Series]:
         df = self.data[index]
         label = df["New_label"]
+        label[label != 0] = 1 # labels were [0, 2]
         data = df.drop(["label", "New_label"], axis=1)
         return data, label
