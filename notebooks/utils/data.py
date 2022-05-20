@@ -41,7 +41,7 @@ class Marconi100Dataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[pd.DataFrame, pd.Series]:
         df = self.data[index]
         timestamps = df["timestamp"]
-        label = df["New_label"]
-        label[label != 0] = 1 # labels were [0, 2]
+        label = df["New_label"].astype(int)
+        label = label.replace(2, 1) # labels were [0, 2], we want [0, 1]
         data = df.drop(["timestamp", "label", "New_label"], axis=1)
         return pd.DataFrame(data.values, index=timestamps, columns=data.columns), pd.Series(label.values, index=timestamps)
