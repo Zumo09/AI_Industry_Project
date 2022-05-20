@@ -20,39 +20,39 @@ class DeepFIBDataset(Marconi100Dataset, ABC):
     def __getitem__(self, index: int) -> Tuple[pd.DataFrame, torch.Tensor, pd.Series]:
         original, label = super().__getitem__(index // self.n)
 
-        masked = self._mask(original)
+        masked = self._mask(original, idx=index%self.n)
 
         return original, masked, label
 
     @abstractmethod
-    def _mask(self, original: pd.DataFrame) -> torch.Tensor:
+    def _mask(self, original: pd.DataFrame, idx: int) -> torch.Tensor:
         raise NotImplementedError()
 
 
 class PointMaskDataset(DeepFIBDataset):
-    def _mask(self, original: pd.DataFrame) -> torch.Tensor:
+    def _mask(self, original: pd.DataFrame, idx: int) -> torch.Tensor:
         """Pointwise Masking"""
         n_mask = int(np.prod(original.shape) / self.n)
 
+        # TODO: make it works without replacements
         # get column indices for the features to mask
-        # TODO: solve problem here
-        col_idxs = random.sample(range(original.shape[1]), n_mask)
+        col_idxs = np.random.choice(range(original.shape[1]), n_mask, replace=True)
         # get row indices for the samples to mask
-        row_idxs = random.sample(range(original.shape[0]), n_mask)
+        row_idxs = np.random.choice(range(original.shape[0]), n_mask, replace=True)
 
-        masked = torch.tensor(original.data)
+        masked = torch.tensor(original.to_numpy())
         masked[row_idxs, col_idxs] = self.mask_tag
         return masked
 
 
 
 class SequenceMaskDataset(DeepFIBDataset):
-    def _mask(self, original: pd.DataFrame) -> torch.Tensor:
+    def _mask(self, original: pd.DataFrame, idx: int) -> torch.Tensor:
         """Sequence Masking"""
         # n_mask = int(np.prod(original.shape) / self.n) ?
 
         # get row indices for the samples to mask
-        # TODO: get start and stop of the sequence
+        # TODO: get start and stop of the sequence (based on idx??)
         start = 0
         stop = 10
 
