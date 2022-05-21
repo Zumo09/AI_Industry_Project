@@ -139,11 +139,87 @@ class EncoderTree(nn.Module):
         return self.zip_up_the_pants(x_even_update, x_odd_update)
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, input_dim: int) -> None:
-        super().__init__()
+class SCINet(nn.Module):
+    def __init__(
+        self,
+        output_len: int,
+        input_len: int,
+        cfg: SCIBlockCfg,
+        num_stacks: int = 1,
+        num_levels: int = 3,
+        num_decoder_layer: int = 1,
+        concat_len: int = 0,
+        single_step_output_One: bool = False,
+        positional_encoding: bool = False,
+        RIN: bool = False,
+    ):
+        super(SCINet, self).__init__()
+
+        assert (
+            input_len % (np.power(2, num_levels)) == 0
+        ), "evenly divided the input length into two parts. (e.g., 32 -> 16 -> 8 -> 4 for 3 levels)"
+
+        self.input_len = input_len
+        self.output_len = output_len
+        self.concat_len = concat_len
+        self.positional_encoding = positional_encoding
+        self.RIN = RIN
+        self.num_decoder_layer = num_decoder_layer
+
+        self.stacks = num_stacks
+        self.overlap_len = input_len // 4
+        self.div_len = input_len // 6
+
+        self.blocks1 = EncoderTree(num_levels, cfg)
+
+        if num_stacks == 2:  # we only implement two stacks at most.
+            self.blocks2 = EncoderTree(num_levels, cfg)
+
+        self.projection1 = nn.Conv1d(
+            input_len, self.output_len, kernel_size=1, stride=1, bias=False
+        )
+        self.div_projection = nn.ModuleList()
+
+        if self.num_decoder_layer > 1:
+            self.projection1 = nn.Linear(input_len, self.output_len)
+            for _ in range(self.num_decoder_layer - 1):
+                div_projection = nn.ModuleList()
+                for i in range(6):
+                    lens = (
+                        min(i * self.div_len + self.overlap_len, input_len)
+                        - i * self.div_len
+                    )
+                    div_projection.append(nn.Linear(lens, self.div_len))
+                self.div_projection.append(div_projection)
+
+        if self.stacks == 2:
+            if single_step_output_One:  # only output the N_th timestep.
+                if self.concat_len:
+                    self.projection2 = nn.Conv1d(
+                        self.concat_len + self.output_len, 1, kernel_size=1, bias=False
+                    )
+                else:
+                    self.projection2 = nn.Conv1d(
+                        input_len + self.output_len, 1, kernel_size=1, bias=False
+                    )
+            else:  # output the N timesteps.
+                if self.concat_len:
+                    self.projection2 = nn.Conv1d(
+                        self.concat_len + self.output_len,
+                        self.output_len,
+                        kernel_size=1,
+                        bias=False,
+                    )
+                else:
+                    self.projection2 = nn.Conv1d(
+                        input_len + self.output_len,
+                        self.output_len,
+                        kernel_size=1,
+                        bias=False,
+                    )
+
         # For positional encoding
-        self.pe_hidden_size = input_dim
+        self.pe_hidden_size = cfg.input_dim
         if self.pe_hidden_size % 2 == 1:
             self.pe_hidden_size += 1
 
@@ -160,7 +236,12 @@ class PositionalEncoding(nn.Module):
         self.inv_timescales: torch.Tensor
         self.register_buffer("inv_timescales", inv_timescales)
 
-    def forward(self, x: Tensor) -> Tensor:
+        ### RIN Parameters ###
+        if self.RIN:
+            self.affine_weight = nn.parameter.Parameter(torch.ones(1, 1, cfg.input_dim))
+            self.affine_bias = nn.parameter.Parameter(torch.zeros(1, 1, cfg.input_dim))
+
+    def get_position_encoding(self, x):
         max_length = x.size()[1]
         position = torch.arange(
             max_length, dtype=torch.float32, device=x.device
@@ -176,88 +257,13 @@ class PositionalEncoding(nn.Module):
 
         return signal
 
-
-class Decoder(nn.Module):
-    def __init__(self, input_len, output_len, num_layer) -> None:
-        super().__init__()
-        self.input_len = input_len
-        self.output_len = output_len
-        self.num_layer = num_layer
-        self.projection1 = nn.Conv1d(
-            input_len, self.output_len, kernel_size=1, stride=1, bias=False
-        )
-
-        self.overlap_len = input_len // 4
-        self.div_len = input_len // 6
-
-        self.div_projection = nn.ModuleList()
-
-        if self.num_layer > 1:
-            self.projection1 = nn.Linear(input_len, self.output_len)
-            for _ in range(self.num_layer - 1):
-                div_projection = nn.ModuleList()
-                for i in range(6):
-                    lens = (
-                        min(i * self.div_len + self.overlap_len, input_len)
-                        - i * self.div_len
-                    )
-                    div_projection.append(nn.Linear(lens, self.div_len))
-                self.div_projection.append(div_projection)
-
-    def forward(self, x: Tensor) -> Tensor:
-        if self.num_layer == 1:
-            return self.projection1(x)
-
-        x = x.permute(0, 2, 1)
-        for div_projection in self.div_projection:
-            output = torch.zeros(x.shape, dtype=x.dtype).cuda()
-            for i, div_layer in enumerate(div_projection):  # type: ignore
-                a, b = i * self.div_len, (i + 1) * self.div_len
-                mlen = min(i * self.div_len + self.overlap_len, self.input_len)
-                div_x = x[:, :, a:mlen]
-                output[:, :, a:b] = div_layer(div_x)
-            x = output
-        x = self.projection1(x)
-        return x.permute(0, 2, 1)
-
-
-class SCINet(nn.Module):
-    def __init__(
-        self,
-        output_len: int,
-        input_len: int,
-        cfg: SCIBlockCfg,
-        num_levels: int = 3,
-        num_decoder_layer: int = 1,
-        concat_len: int = 0,
-        pos_enc: bool = False,
-        RIN: bool = False,
-    ):
-        super(SCINet, self).__init__()
-
-        assert (
-            input_len % (np.power(2, num_levels)) == 0
-        ), "evenly divided the input length into two parts. (e.g., 32 -> 16 -> 8 -> 4 for 3 levels)"
-
-        self.concat_len = concat_len
-        self.RIN = RIN
-
-        self.pos_enc = PositionalEncoding(cfg.input_dim) if pos_enc else None
-        self.encoder = EncoderTree(num_levels, cfg)
-        self.decoder = Decoder(input_len, output_len, num_decoder_layer)
-
-        ### RIN Parameters ###
-        if self.RIN:
-            self.affine_weight = nn.parameter.Parameter(torch.ones(1, 1, cfg.input_dim))
-            self.affine_bias = nn.parameter.Parameter(torch.zeros(1, 1, cfg.input_dim))
-
-    def forward(self, x: Tensor) -> Tensor:
-        if self.pos_enc is not None:
-            pe: Tensor = self.pos_enc(x)
+    def forward(self, x):
+        if self.positional_encoding:
+            pe = self.get_position_encoding(x)
             if pe.shape[2] > x.shape[2]:
                 x += pe[:, :, :-1]
             else:
-                x += pe
+                x += self.get_position_encoding(x)
 
         ### activated when RIN flag is set ###
         if self.RIN:
@@ -277,14 +283,57 @@ class SCINet(nn.Module):
 
         # the first stack
         res1 = x
-        x = self.encoder(x)
+        x = self.blocks1(x)
         x += res1
-        x = self.decoder(x)
+        if self.num_decoder_layer == 1:
+            x = self.projection1(x)
+        else:
+            x = x.permute(0, 2, 1)
+            for div_projection in self.div_projection:
+                output = torch.zeros(x.shape, dtype=x.dtype).cuda()
+                for i, div_layer in enumerate(div_projection):  # type: ignore
+                    a, b = i * self.div_len, (i + 1) * self.div_len
+                    mlen = min(i * self.div_len + self.overlap_len, self.input_len)
+                    div_x = x[:, :, a:mlen]
+                    output[:, :, a:b] = div_layer(div_x)
+                x = output
+            x = self.projection1(x)
+            x = x.permute(0, 2, 1)
 
-        if self.RIN:
-            x = x - self.affine_bias
-            x = x / (self.affine_weight + 1e-10)
-            x = x * stdev
-            x = x + means
+        if self.stacks == 1:
+            ### reverse RIN ###
+            if self.RIN:
+                x = x - self.affine_bias
+                x = x / (self.affine_weight + 1e-10)
+                x = x * stdev
+                x = x + means
 
-        return x
+            return x
+
+        elif self.stacks == 2:
+            MidOutPut = x
+            if self.concat_len:
+                x = torch.cat((res1[:, -self.concat_len :, :], x), dim=1)
+            else:
+                x = torch.cat((res1, x), dim=1)
+
+            # the second stack
+            res2 = x
+            x = self.blocks2(x)
+            x += res2
+            x = self.projection2(x)
+
+            ### Reverse RIN ###
+            if self.RIN:
+                MidOutPut = MidOutPut - self.affine_bias
+                MidOutPut = MidOutPut / (self.affine_weight + 1e-10)
+                MidOutPut = MidOutPut * stdev
+                MidOutPut = MidOutPut + means
+
+            if self.RIN:
+                x = x - self.affine_bias
+                x = x / (self.affine_weight + 1e-10)
+                x = x * stdev
+                x = x + means
+
+            return x, MidOutPut
