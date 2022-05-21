@@ -2,266 +2,128 @@
 From the repository of the paper
 https://github.com/cure-lab/SCINet
 """
+from dataclasses import dataclass
 import math
+from typing import Tuple
 import torch.nn.functional as F
-from torch.autograd import Variable
 from torch import nn
+from torch import Tensor
 import torch
-import argparse
 import numpy as np
 
 
+@dataclass(frozen=True)
+class SCIBlockCfg:
+    input_dim: int = 0
+    hidden_size: int = 1
+    kernel_size: int = 3
+    groups: int = 1
+    dilation: int = 1
+    dropout: float = 0.5
+    splitting: bool = True
+    modified: bool = True
+
+    @property
+    def pad_l(self) -> int:
+        return self._pad(2)
+
+    @property
+    def pad_r(self):
+        return self._pad(0)
+
+    def _pad(self, pad) -> int:
+        # by default: stride==1, else we fix the kernel size of the second layer as 3.
+        pad = pad if self.kernel_size % 2 == 0 else 1
+        return self.dilation * (self.kernel_size - pad) // 2 + 1
+
+
 class Splitting(nn.Module):
-    def __init__(self):
-        super(Splitting, self).__init__()
-
-    def even(self, x):
-        return x[:, ::2, :]
-
-    def odd(self, x):
-        return x[:, 1::2, :]
-
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         """Returns the odd and even part"""
-        return (self.even(x), self.odd(x))
+        return x[:, ::2, :], x[:, 1::2, :]
 
 
-class Interactor(nn.Module):
-    def __init__(
-        self,
-        in_planes,
-        splitting=True,
-        kernel=5,
-        dropout=0.5,
-        groups=1,
-        hidden_size=1,
-        INN=True,
-    ):
-        super(Interactor, self).__init__()
-        self.modified = INN
-        self.kernel_size = kernel
-        self.dilation = 1
-        self.dropout = dropout
-        self.hidden_size = hidden_size
-        self.groups = groups
-        if self.kernel_size % 2 == 0:
-            pad_l = (
-                self.dilation * (self.kernel_size - 2) // 2 + 1
-            )  # by default: stride==1
-            pad_r = self.dilation * (self.kernel_size) // 2 + 1  # by default: stride==1
+class Interactor(nn.Sequential):
+    def __init__(self, prev_size: int, cfg: SCIBlockCfg) -> None:
+        super().__init__(
+            nn.ReplicationPad1d((cfg.pad_l, cfg.pad_r)),
+            nn.Conv1d(
+                cfg.input_dim * prev_size,
+                int(cfg.input_dim * cfg.hidden_size),
+                kernel_size=cfg.kernel_size,
+                dilation=cfg.dilation,
+                stride=1,
+                groups=cfg.groups,
+            ),
+            nn.LeakyReLU(negative_slope=0.01, inplace=True),
+            nn.Dropout(cfg.dropout),
+            nn.Conv1d(
+                int(cfg.input_dim * cfg.hidden_size),
+                cfg.input_dim,
+                kernel_size=3,
+                stride=1,
+                groups=cfg.groups,
+            ),
+            nn.Tanh(),
+        )
 
-        else:
-            pad_l = (
-                self.dilation * (self.kernel_size - 1) // 2 + 1
-            )  # we fix the kernel size of the second layer as 3.
-            pad_r = self.dilation * (self.kernel_size - 1) // 2 + 1
-        self.splitting = splitting
+
+class SCINetBlock(nn.Module):
+    def __init__(self, cfg: SCIBlockCfg) -> None:
+        super().__init__()
+        self.modified = cfg.modified
+
+        self.splitting = cfg.splitting
         self.split = Splitting()
 
-        modules_P = []
-        modules_U = []
-        modules_psi = []
-        modules_phi = []
         prev_size = 1
+        self.P = Interactor(prev_size, cfg)
+        self.U = Interactor(prev_size, cfg)
+        self.phi = Interactor(prev_size, cfg)
+        self.psi = Interactor(prev_size, cfg)
 
-        size_hidden = self.hidden_size
-        modules_P += [
-            nn.ReplicationPad1d((pad_l, pad_r)),
-            nn.Conv1d(
-                in_planes * prev_size,
-                int(in_planes * size_hidden),
-                kernel_size=self.kernel_size,
-                dilation=self.dilation,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Dropout(self.dropout),
-            nn.Conv1d(
-                int(in_planes * size_hidden),
-                in_planes,
-                kernel_size=3,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.Tanh(),
-        ]
-        modules_U += [
-            nn.ReplicationPad1d((pad_l, pad_r)),
-            nn.Conv1d(
-                in_planes * prev_size,
-                int(in_planes * size_hidden),
-                kernel_size=self.kernel_size,
-                dilation=self.dilation,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Dropout(self.dropout),
-            nn.Conv1d(
-                int(in_planes * size_hidden),
-                in_planes,
-                kernel_size=3,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.Tanh(),
-        ]
+    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+        x_even, x_odd = self.split(x) if self.splitting else x
 
-        modules_phi += [
-            nn.ReplicationPad1d((pad_l, pad_r)),
-            nn.Conv1d(
-                in_planes * prev_size,
-                int(in_planes * size_hidden),
-                kernel_size=self.kernel_size,
-                dilation=self.dilation,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Dropout(self.dropout),
-            nn.Conv1d(
-                int(in_planes * size_hidden),
-                in_planes,
-                kernel_size=3,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.Tanh(),
-        ]
-        modules_psi += [
-            nn.ReplicationPad1d((pad_l, pad_r)),
-            nn.Conv1d(
-                in_planes * prev_size,
-                int(in_planes * size_hidden),
-                kernel_size=self.kernel_size,
-                dilation=self.dilation,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Dropout(self.dropout),
-            nn.Conv1d(
-                int(in_planes * size_hidden),
-                in_planes,
-                kernel_size=3,
-                stride=1,
-                groups=self.groups,
-            ),
-            nn.Tanh(),
-        ]
-        self.phi = nn.Sequential(*modules_phi)
-        self.psi = nn.Sequential(*modules_psi)
-        self.P = nn.Sequential(*modules_P)
-        self.U = nn.Sequential(*modules_U)
-
-    def forward(self, x):
-        if self.splitting:
-            (x_even, x_odd) = self.split(x)
-        else:
-            (x_even, x_odd) = x
+        x_even: Tensor = x_even.permute(0, 2, 1)
+        x_odd: Tensor = x_odd.permute(0, 2, 1)
 
         if self.modified:
-            x_even = x_even.permute(0, 2, 1)
-            x_odd = x_odd.permute(0, 2, 1)
-
             d = x_odd.mul(torch.exp(self.phi(x_even)))
             c = x_even.mul(torch.exp(self.psi(x_odd)))
 
             x_even_update = c + self.U(d)
             x_odd_update = d - self.P(c)
-
-            return (x_even_update, x_odd_update)
+            x_even, x_odd = x_even_update, x_odd_update
 
         else:
-            x_even = x_even.permute(0, 2, 1)
-            x_odd = x_odd.permute(0, 2, 1)
-
             d = x_odd - self.P(x_even)
             c = x_even + self.U(d)
+            x_even, x_odd = c, d
 
-            return (c, d)
+        x_even = x_even.permute(0, 2, 1)
+        x_odd = x_odd.permute(0, 2, 1)
 
-
-class InteractorLevel(nn.Module):
-    def __init__(self, in_planes, kernel, dropout, groups, hidden_size, INN):
-        super(InteractorLevel, self).__init__()
-        self.level = Interactor(
-            in_planes=in_planes,
-            splitting=True,
-            kernel=kernel,
-            dropout=dropout,
-            groups=groups,
-            hidden_size=hidden_size,
-            INN=INN,
-        )
-
-    def forward(self, x):
-        (x_even_update, x_odd_update) = self.level(x)
-        return (x_even_update, x_odd_update)
+        return x_even, x_odd
 
 
-class LevelSCINet(nn.Module):
-    def __init__(self, in_planes, kernel_size, dropout, groups, hidden_size, INN):
-        super(LevelSCINet, self).__init__()
-        self.interact = InteractorLevel(
-            in_planes=in_planes,
-            kernel=kernel_size,
-            dropout=dropout,
-            groups=groups,
-            hidden_size=hidden_size,
-            INN=INN,
-        )
-
-    def forward(self, x):
-        (x_even_update, x_odd_update) = self.interact(x)
-        return x_even_update.permute(0, 2, 1), x_odd_update.permute(
-            0, 2, 1
-        )  # even: B, T, D odd: B, T, D
-
-
-class SCINet_Tree(nn.Module):
-    def __init__(
-        self, in_planes, current_level, kernel_size, dropout, groups, hidden_size, INN
-    ):
+class EncoderTree(nn.Module):
+    def __init__(self, num_levels: int, cfg: SCIBlockCfg) -> None:
         super().__init__()
-        self.current_level = current_level
+        self.current_level = num_levels - 1
+        self.workingblock = SCINetBlock(cfg)
 
-        self.workingblock = LevelSCINet(
-            in_planes=in_planes,
-            kernel_size=kernel_size,
-            dropout=dropout,
-            groups=groups,
-            hidden_size=hidden_size,
-            INN=INN,
-        )
+        if self.current_level != 0:
+            self.SCINet_Tree_odd = EncoderTree(self.current_level, cfg)
+            self.SCINet_Tree_even = EncoderTree(self.current_level, cfg)
 
-        if current_level != 0:
-            self.SCINet_Tree_odd = SCINet_Tree(
-                in_planes,
-                current_level - 1,
-                kernel_size,
-                dropout,
-                groups,
-                hidden_size,
-                INN,
-            )
-            self.SCINet_Tree_even = SCINet_Tree(
-                in_planes,
-                current_level - 1,
-                kernel_size,
-                dropout,
-                groups,
-                hidden_size,
-                INN,
-            )
-
-    def zip_up_the_pants(self, even, odd):
+    def zip_up_the_pants(self, even: Tensor, odd: Tensor) -> Tensor:
+        # We recursively reordered these sub-series.
         even = even.permute(1, 0, 2)
         odd = odd.permute(1, 0, 2)  # L, B, D
         even_len = even.shape[0]
         odd_len = odd.shape[0]
-        mlen = min((odd_len, even_len))
+        mlen = min(odd_len, even_len)
         pants = []
         for i in range(mlen):
             pants.append(even[i].unsqueeze(0))
@@ -272,138 +134,77 @@ class SCINet_Tree(nn.Module):
 
     def forward(self, x):
         x_even_update, x_odd_update = self.workingblock(x)
-        # We recursively reordered these sub-series. You can run the ./utils/recursive_demo.py to emulate this procedure.
-        if self.current_level == 0:
-            return self.zip_up_the_pants(x_even_update, x_odd_update)
-        else:
-            return self.zip_up_the_pants(
-                self.SCINet_Tree_even(x_even_update), self.SCINet_Tree_odd(x_odd_update)
-            )
+        if self.current_level > 0:
+            x_even_update = self.SCINet_Tree_even(x_even_update)
+            x_odd_update = self.SCINet_Tree_odd(x_odd_update)
 
-
-class EncoderTree(nn.Module):
-    def __init__(
-        self, in_planes, num_levels, kernel_size, dropout, groups, hidden_size, INN
-    ):
-        super().__init__()
-        self.levels = num_levels
-        self.SCINet_Tree = SCINet_Tree(
-            in_planes=in_planes,
-            current_level=num_levels - 1,
-            kernel_size=kernel_size,
-            dropout=dropout,
-            groups=groups,
-            hidden_size=hidden_size,
-            INN=INN,
-        )
-
-    def forward(self, x):
-
-        x = self.SCINet_Tree(x)
-
-        return x
+        return self.zip_up_the_pants(x_even_update, x_odd_update)
 
 
 class SCINet(nn.Module):
     def __init__(
         self,
-        output_len,
-        input_len,
-        input_dim=9,
-        hid_size=1,
-        num_stacks=1,
-        num_levels=3,
-        num_decoder_layer=1,
-        concat_len=0,
-        groups=1,
-        kernel=5,
-        dropout=0.5,
-        single_step_output_One=0,
-        input_len_seg=0,
-        positionalE=False,
-        modified=True,
-        RIN=False,
+        output_len: int,
+        input_len: int,
+        cfg: SCIBlockCfg,
+        num_stacks: int = 1,
+        num_levels: int = 3,
+        num_decoder_layer: int = 1,
+        concat_len: int = 0,
+        single_step_output_One: bool = False,
+        positional_encoding: bool = False,
+        RIN: bool = False,
     ):
         super(SCINet, self).__init__()
 
-        self.input_dim = input_dim
+        assert (
+            input_len % (np.power(2, num_levels)) == 0
+        ), "evenly divided the input length into two parts. (e.g., 32 -> 16 -> 8 -> 4 for 3 levels)"
+
         self.input_len = input_len
         self.output_len = output_len
-        self.hidden_size = hid_size
-        self.num_levels = num_levels
-        self.groups = groups
-        self.modified = modified
-        self.kernel_size = kernel
-        self.dropout = dropout
-        self.single_step_output_One = single_step_output_One
         self.concat_len = concat_len
-        self.pe = positionalE
+        self.positional_encoding = positional_encoding
         self.RIN = RIN
         self.num_decoder_layer = num_decoder_layer
 
-        self.blocks1 = EncoderTree(
-            in_planes=self.input_dim,
-            num_levels=self.num_levels,
-            kernel_size=self.kernel_size,
-            dropout=self.dropout,
-            groups=self.groups,
-            hidden_size=self.hidden_size,
-            INN=modified,
-        )
+        self.stacks = num_stacks
+        self.overlap_len = input_len // 4
+        self.div_len = input_len // 6
+
+        self.blocks1 = EncoderTree(num_levels, cfg)
 
         if num_stacks == 2:  # we only implement two stacks at most.
-            self.blocks2 = EncoderTree(
-                in_planes=self.input_dim,
-                num_levels=self.num_levels,
-                kernel_size=self.kernel_size,
-                dropout=self.dropout,
-                groups=self.groups,
-                hidden_size=self.hidden_size,
-                INN=modified,
-            )
+            self.blocks2 = EncoderTree(num_levels, cfg)
 
-        self.stacks = num_stacks
-
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2.0 / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-            elif isinstance(m, nn.Linear):
-                m.bias.data.zero_()
         self.projection1 = nn.Conv1d(
-            self.input_len, self.output_len, kernel_size=1, stride=1, bias=False
+            input_len, self.output_len, kernel_size=1, stride=1, bias=False
         )
         self.div_projection = nn.ModuleList()
-        self.overlap_len = self.input_len // 4
-        self.div_len = self.input_len // 6
 
         if self.num_decoder_layer > 1:
-            self.projection1 = nn.Linear(self.input_len, self.output_len)
-            for layer_idx in range(self.num_decoder_layer - 1):
+            self.projection1 = nn.Linear(input_len, self.output_len)
+            for _ in range(self.num_decoder_layer - 1):
                 div_projection = nn.ModuleList()
                 for i in range(6):
                     lens = (
-                        min(i * self.div_len + self.overlap_len, self.input_len)
+                        min(i * self.div_len + self.overlap_len, input_len)
                         - i * self.div_len
                     )
                     div_projection.append(nn.Linear(lens, self.div_len))
                 self.div_projection.append(div_projection)
 
-        if self.single_step_output_One:  # only output the N_th timestep.
-            if self.stacks == 2:
+        if self.stacks == 2:
+            if single_step_output_One:  # only output the N_th timestep.
                 if self.concat_len:
                     self.projection2 = nn.Conv1d(
                         self.concat_len + self.output_len, 1, kernel_size=1, bias=False
                     )
                 else:
                     self.projection2 = nn.Conv1d(
-                        self.input_len + self.output_len, 1, kernel_size=1, bias=False
+                        input_len + self.output_len, 1, kernel_size=1, bias=False
                     )
-        else:  # output the N timesteps.
-            if self.stacks == 2:
+            else:  # output the N timesteps.
                 if self.concat_len:
                     self.projection2 = nn.Conv1d(
                         self.concat_len + self.output_len,
@@ -413,14 +214,14 @@ class SCINet(nn.Module):
                     )
                 else:
                     self.projection2 = nn.Conv1d(
-                        self.input_len + self.output_len,
+                        input_len + self.output_len,
                         self.output_len,
                         kernel_size=1,
                         bias=False,
                     )
 
         # For positional encoding
-        self.pe_hidden_size = input_dim
+        self.pe_hidden_size = cfg.input_dim
         if self.pe_hidden_size % 2 == 1:
             self.pe_hidden_size += 1
 
@@ -431,7 +232,6 @@ class SCINet(nn.Module):
         log_timescale_increment = math.log(
             float(max_timescale) / float(min_timescale)
         ) / max(num_timescales - 1, 1)
-        temp = torch.arange(num_timescales, dtype=torch.float32)
         inv_timescales = min_timescale * torch.exp(
             torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
         )
@@ -440,8 +240,8 @@ class SCINet(nn.Module):
 
         ### RIN Parameters ###
         if self.RIN:
-            self.affine_weight = nn.parameter.Parameter(torch.ones(1, 1, input_dim))
-            self.affine_bias = nn.parameter.Parameter(torch.zeros(1, 1, input_dim))
+            self.affine_weight = nn.parameter.Parameter(torch.ones(1, 1, cfg.input_dim))
+            self.affine_bias = nn.parameter.Parameter(torch.zeros(1, 1, cfg.input_dim))
 
     def get_position_encoding(self, x):
         max_length = x.size()[1]
@@ -460,10 +260,7 @@ class SCINet(nn.Module):
         return signal
 
     def forward(self, x):
-        assert (
-            self.input_len % (np.power(2, self.num_levels)) == 0
-        )  # evenly divided the input length into two parts. (e.g., 32 -> 16 -> 8 -> 4 for 3 levels)
-        if self.pe:
+        if self.positional_encoding:
             pe = self.get_position_encoding(x)
             if pe.shape[2] > x.shape[2]:
                 x += pe[:, :, :-1]
@@ -497,17 +294,10 @@ class SCINet(nn.Module):
             for div_projection in self.div_projection:
                 output = torch.zeros(x.shape, dtype=x.dtype).cuda()
                 for i, div_layer in enumerate(div_projection):  # type: ignore
-                    div_x = x[
-                        :,
-                        :,
-                        i
-                        * self.div_len : min(
-                            i * self.div_len + self.overlap_len, self.input_len
-                        ),
-                    ]
-                    output[:, :, i * self.div_len : (i + 1) * self.div_len] = div_layer(
-                        div_x
-                    )
+                    a, b = i * self.div_len, (i + 1) * self.div_len
+                    mlen = min(i * self.div_len + self.overlap_len, self.input_len)
+                    div_x = x[:, :, a:mlen]
+                    output[:, :, a:b] = div_layer(div_x)
                 x = output
             x = self.projection1(x)
             x = x.permute(0, 2, 1)
@@ -549,51 +339,3 @@ class SCINet(nn.Module):
                 x = x + means
 
             return x, MidOutPut
-
-
-def get_variable(x):
-    x = Variable(x)
-    return x.cuda() if torch.cuda.is_available() else x
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--window_size", type=int, default=96)
-    parser.add_argument("--horizon", type=int, default=12)
-
-    parser.add_argument("--dropout", type=float, default=0.5)
-    parser.add_argument("--groups", type=int, default=1)
-
-    parser.add_argument(
-        "--hidden-size", default=1, type=int, help="hidden channel of module"
-    )
-    parser.add_argument("--INN", default=1, type=int, help="use INN or basic strategy")
-    parser.add_argument("--kernel", default=3, type=int, help="kernel size")
-    parser.add_argument("--dilation", default=1, type=int, help="dilation")
-    parser.add_argument("--positionalEcoding", type=bool, default=True)
-
-    parser.add_argument("--single_step_output_One", type=int, default=0)
-
-    args = parser.parse_args()
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model = SCINet(
-        output_len=args.horizon,
-        input_len=args.window_size,
-        input_dim=9,
-        hid_size=args.hidden_size,
-        num_stacks=1,
-        num_levels=3,
-        concat_len=0,
-        groups=args.groups,
-        kernel=args.kernel,
-        dropout=args.dropout,
-        single_step_output_One=args.single_step_output_One,
-        positionalE=args.positionalEcoding,
-        modified=True,
-    ).to(device)
-    x = torch.randn(32, 96, 9, device=device)
-    y = model(x)
-    print(y.shape)

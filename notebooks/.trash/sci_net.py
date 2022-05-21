@@ -364,15 +364,20 @@ class SCINet(nn.Module):
 
         self.stacks = num_stacks
 
+        qualcosa = False
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
+                qualcosa = True
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2.0 / n))
             elif isinstance(m, nn.BatchNorm2d):
+                qualcosa = True
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
+                qualcosa = True
                 m.bias.data.zero_()
+        print(qualcosa)
         self.projection1 = nn.Conv1d(
             self.input_len, self.output_len, kernel_size=1, stride=1, bias=False
         )
