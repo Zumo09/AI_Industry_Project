@@ -27,19 +27,13 @@ class SCIBlockCfg:
         return self._pad(2)
 
     @property
-    def pad_r(self):
+    def pad_r(self) -> int:
         return self._pad(0)
 
     def _pad(self, pad) -> int:
         # by default: stride==1, else we fix the kernel size of the second layer as 3.
         pad = pad if self.kernel_size % 2 == 0 else 1
         return self.dilation * (self.kernel_size - pad) // 2 + 1
-
-
-class Splitting(nn.Module):
-    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
-        """Returns the odd and even part"""
-        return x[:, ::2, :], x[:, 1::2, :]
 
 
 class Interactor(nn.Sequential):
@@ -71,14 +65,16 @@ class SCINetBlock(nn.Module):
     def __init__(self, cfg: SCIBlockCfg) -> None:
         super().__init__()
         self.modified = cfg.modified
-
-        self.split = Splitting()
-
         prev_size = 1
+
         self.P = Interactor(prev_size, cfg)
         self.U = Interactor(prev_size, cfg)
         self.phi = Interactor(prev_size, cfg)
         self.psi = Interactor(prev_size, cfg)
+
+    @staticmethod
+    def split(x: Tensor) -> Tuple[Tensor, Tensor]:
+        return x[:, ::2, :], x[:, 1::2, :]
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         x_even, x_odd = self.split(x)
@@ -139,61 +135,22 @@ class EncoderTree(nn.Module):
         return self.zip_up_the_pants(x_even_update, x_odd_update)
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, input_dim: int) -> None:
-        super().__init__()
-        # For positional encoding
-        self.pe_hidden_size = input_dim
-        if self.pe_hidden_size % 2 == 1:
-            self.pe_hidden_size += 1
-
-        num_timescales = self.pe_hidden_size // 2
-        max_timescale = 10000.0
-        min_timescale = 1.0
-
-        log_timescale_increment = math.log(
-            float(max_timescale) / float(min_timescale)
-        ) / max(num_timescales - 1, 1)
-        inv_timescales = min_timescale * torch.exp(
-            torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
-        )
-        self.inv_timescales: torch.Tensor
-        self.register_buffer("inv_timescales", inv_timescales)
-
-    def forward(self, x: Tensor) -> Tensor:
-        max_length = x.size()[1]
-        position = torch.arange(
-            max_length, dtype=torch.float32, device=x.device
-        )  # tensor([0., 1., 2., 3., 4.], device='cuda:0')
-        # temp1 = position.unsqueeze(1)  # 5 1
-        # temp2 = self.inv_timescales.unsqueeze(0)  # 1 256
-        scaled_time = position.unsqueeze(1) * self.inv_timescales.unsqueeze(0)  # 5 256
-        signal = torch.cat(
-            [torch.sin(scaled_time), torch.cos(scaled_time)], dim=1
-        )  # [T, C]
-        signal = F.pad(signal, (0, 0, 0, self.pe_hidden_size % 2))
-        signal = signal.view(1, max_length, self.pe_hidden_size)
-
-        return signal
-
-
 class Decoder(nn.Module):
     def __init__(self, input_len, output_len, num_layer) -> None:
         super().__init__()
         self.input_len = input_len
-        self.output_len = output_len
-        self.num_layer = num_layer
-        self.projection1 = nn.Conv1d(
-            input_len, self.output_len, kernel_size=1, stride=1, bias=False
-        )
-
         self.overlap_len = input_len // 4
         self.div_len = input_len // 6
+        self.num_layer = num_layer
+
+        self.projection1 = nn.Conv1d(
+            input_len, output_len, kernel_size=1, stride=1, bias=False
+        )
 
         self.div_projection = nn.ModuleList()
 
         if self.num_layer > 1:
-            self.projection1 = nn.Linear(input_len, self.output_len)
+            self.projection1 = nn.Linear(input_len, output_len)
             for _ in range(self.num_layer - 1):
                 div_projection = nn.ModuleList()
                 for i in range(6):
@@ -221,70 +178,75 @@ class Decoder(nn.Module):
         return x.permute(0, 2, 1)
 
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, input_dim: int) -> None:
+        super().__init__()
+        # For positional encoding
+        self.pe_hidden_size = input_dim
+        if self.pe_hidden_size % 2 == 1:
+            self.pe_hidden_size += 1
+
+        num_timescales = self.pe_hidden_size // 2
+        max_timescale = 10000.0
+        min_timescale = 1.0
+
+        log_timescale_increment = math.log(max_timescale / min_timescale) / max(
+            num_timescales - 1, 1
+        )
+        inv_timescales = min_timescale * torch.exp(
+            torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
+        )
+        self.inv_timescales: torch.Tensor
+        self.register_buffer("inv_timescales", inv_timescales)
+
+    def get_encoding(self, x: Tensor) -> Tensor:
+        max_length = x.size()[1]
+        position = torch.arange(
+            max_length, dtype=torch.float32, device=x.device
+        )  # tensor([0., 1., 2., 3., 4.], device='cuda:0')
+        scaled_time = position.unsqueeze(1) * self.inv_timescales.unsqueeze(0)  # 5 256
+        signal = torch.cat(
+            [torch.sin(scaled_time), torch.cos(scaled_time)], dim=1
+        )  # [T, C]
+        signal = F.pad(signal, (0, 0, 0, self.pe_hidden_size % 2))
+        signal = signal.view(1, max_length, self.pe_hidden_size)
+
+        return signal
+
+    def forward(self, x: Tensor) -> Tensor:
+        signal = self.get_encoding(x)
+        if signal.shape[2] > x.shape[2]:
+            return x + signal[:, :, :-1]
+        else:
+            return x + signal
+
+
 class SCINet(nn.Module):
     def __init__(
         self,
-        output_len: int,
+        *,
         input_len: int,
-        cfg: SCIBlockCfg,
-        num_levels: int = 3,
-        num_decoder_layer: int = 1,
-        concat_len: int = 0,
+        num_encoder_levels: int,
+        num_decoder_layer: int,
+        output_len: int,
         pos_enc: bool = False,
-        RIN: bool = False,
+        block_config: SCIBlockCfg,
     ):
-        super(SCINet, self).__init__()
+        super().__init__()
 
         assert (
-            input_len % (np.power(2, num_levels)) == 0
+            input_len % (np.power(2, num_encoder_levels)) == 0
         ), "evenly divided the input length into two parts. (e.g., 32 -> 16 -> 8 -> 4 for 3 levels)"
 
-        self.concat_len = concat_len
-        self.RIN = RIN
-
-        self.pos_enc = PositionalEncoding(cfg.input_dim) if pos_enc else None
-        self.encoder = EncoderTree(num_levels, cfg)
+        self.pos_enc = PositionalEncoding(block_config.input_dim) if pos_enc else None
+        self.encoder = EncoderTree(num_encoder_levels, block_config)
         self.decoder = Decoder(input_len, output_len, num_decoder_layer)
-
-        ### RIN Parameters ###
-        if self.RIN:
-            self.affine_weight = nn.parameter.Parameter(torch.ones(1, 1, cfg.input_dim))
-            self.affine_bias = nn.parameter.Parameter(torch.zeros(1, 1, cfg.input_dim))
 
     def forward(self, x: Tensor) -> Tensor:
         if self.pos_enc is not None:
-            pe: Tensor = self.pos_enc(x)
-            if pe.shape[2] > x.shape[2]:
-                x += pe[:, :, :-1]
-            else:
-                x += pe
+            x = self.pos_enc(x)
 
-        ### activated when RIN flag is set ###
-        if self.RIN:
-            print("/// RIN ACTIVATED ///\r", end="")
-            means = x.mean(1, keepdim=True).detach()
-            # mean
-            x = x - means
-            # var
-            stdev = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5)
-            x /= stdev
-            # affine
-            # print(x.shape,self.affine_weight.shape,self.affine_bias.shape)
-            x = x * self.affine_weight + self.affine_bias
-        else:
-            stdev = 0
-            means = 0
-
-        # the first stack
-        res1 = x
-        x = self.encoder(x)
-        x += res1
+        x += self.encoder(x)
         x = self.decoder(x)
-
-        if self.RIN:
-            x = x - self.affine_bias
-            x = x / (self.affine_weight + 1e-10)
-            x = x * stdev
-            x = x + means
 
         return x
