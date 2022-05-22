@@ -238,15 +238,27 @@ class SCINet(nn.Module):
             input_len % (np.power(2, num_encoder_levels)) == 0
         ), "evenly divided the input length into two parts. (e.g., 32 -> 16 -> 8 -> 4 for 3 levels)"
 
+        print("Initializing Scinet...")
         self.pos_enc = PositionalEncoding(block_config.input_dim) if pos_enc else None
+        print("Initializing Encoder Tree...")
         self.encoder = EncoderTree(num_encoder_levels, block_config)
+        print("Initializing Decoder...")
         self.decoder = Decoder(input_len, output_len, num_decoder_layer)
+        print("Ready")
+
+    def pad(self, x: Tensor) -> Tensor:
+        bottom = self.decoder.input_len - x.shape[1]
+        return F.pad(x, (0, 0, 0, bottom), 'replicate')
 
     def forward(self, x: Tensor) -> Tensor:
+        print(x.shape, x.dtype)
+        x = self.pad(x)
         if self.pos_enc is not None:
             x = self.pos_enc(x)
 
+        print(x.shape, x.dtype)
         x += self.encoder(x)
+        print(x.shape, x.dtype)
         x = self.decoder(x)
 
         return x

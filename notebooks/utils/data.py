@@ -41,7 +41,7 @@ class Marconi100Dataset(Dataset):
         label = label.replace(2, 1)  # labels were [0, 2], we want [0, 1]
         data = df.drop(["timestamp", "label", "New_label"], axis=1)
         if normalize:
-            data = (data - data.mean()) / data.std()
+            data = (data - data.mean()) / (data.std() + 1e-5)
         return pd.DataFrame(
             data.values, index=timestamps, columns=data.columns
         ), pd.Series(label.values, index=timestamps)
