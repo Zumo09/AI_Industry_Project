@@ -1,6 +1,7 @@
-from typing import Tuple
+from typing import List, Tuple
 
 import torch
+import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -10,16 +11,26 @@ from utils.data import Marconi100Dataset
 
 def unfold(
     marconi_dataset: Marconi100Dataset, horizon: int
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> List[Tuple[torch.Tensor, torch.Tensor]]:
     ret = []
-    for i in tqdm(range(len(marconi_dataset))):
+    for i in tqdm(range(len(marconi_dataset)), desc="Unfolding"):
         df, l = marconi_dataset[i]
         df = torch.tensor(df.to_numpy())
         l = torch.tensor(l.to_numpy()[..., np.newaxis])
-        t = torch.cat([df, l], dim=1).unfold(0, horizon, horizon//2)
-        ret.append(t.permute(0, 2, 1))
-    ret = torch.cat(ret, dim=0)
-    return ret[..., :-1], ret[..., -1]
+        if len(df) == 0:
+            continue
+        t = torch.cat([df, l], dim=1)
+        if len(t) > horizon:
+            t = t.unfold(0, horizon, horizon//2).permute(0, 2, 1)
+        else:
+            t = pad(t, horizon)
+        ret.append((t[..., :-1], t[..., -1]))
+    return ret
+
+
+def pad(x: torch.Tensor, input_len: int) -> torch.Tensor:
+    bottom = input_len - x.shape[1]
+    return F.pad(x, (0, 0, 0, bottom), "replicate")
 
 
 def masks(shape: Tuple[int, int], n: int) -> torch.Tensor:
@@ -49,9 +60,9 @@ class DeepFIBDataset(Dataset):
     def __init__(
         self, marconi_dataset: Marconi100Dataset, horizon: int, num_sample_per_data: int
     ) -> None:
-        self.dataset, self.labels = unfold(marconi_dataset, horizon)
+        self.dataset = unfold(marconi_dataset, horizon)
         self.n = num_sample_per_data
-        self.masks = masks(self.dataset.shape[1:], num_sample_per_data)
+        self.masks = masks(self.dataset[0][0].shape[1:], num_sample_per_data)
 
     def __len__(self) -> int:
         return len(self.dataset) * self.n
@@ -61,8 +72,7 @@ class DeepFIBDataset(Dataset):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         data_idx = index // self.n
         mask_idx = index % self.n
-        data = self.dataset[data_idx]
-        label = self.labels[data_idx]
+        data, label = self.dataset[data_idx]
         mask = self.masks[mask_idx]
         return data, mask, label
 

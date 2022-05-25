@@ -156,8 +156,3 @@ class SCINet(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x += self.encoder(x)
         return self.decoder(x)
-
-
-def pad(input_len: int, x: Tensor) -> Tensor:
-    bottom = input_len - x.shape[1]
-    return F.pad(x, (0, 0, 0, bottom), "replicate")

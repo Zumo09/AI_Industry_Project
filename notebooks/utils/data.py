@@ -31,7 +31,7 @@ def get_train_test_split(
 class Marconi100Dataset(Dataset):
     def __init__(self, paths: List[str], normalize: bool = True) -> None:
         super().__init__()
-        self.data = [self._load(path, normalize) for path in tqdm(paths)]
+        self.data = [self._load(path, normalize) for path in tqdm(paths, desc="Loading")]
 
     @staticmethod
     def _load(path: str, normalize: bool) -> Tuple[pd.DataFrame, pd.Series]:
