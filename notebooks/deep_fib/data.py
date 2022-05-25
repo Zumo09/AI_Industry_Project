@@ -42,4 +42,4 @@ class DeepFIBDataset(Dataset):
         # permute columns
         mask = mask[:, np.random.permutation(mask.shape[1])]
         
-        return mask
+        return torch.tensor(mask)
