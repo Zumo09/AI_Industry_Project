@@ -25,21 +25,17 @@ class DeepFIBDataset(Dataset):
         return original_tensor, mask, (original, label)
 
     def _mask(self, shape: Tuple[int, int]) -> torch.Tensor:
-        """Pointwise Masking"""
-        
-        mask = torch.ones(np.prod(shape))
-    
+        """Pointwise Masking"""        
+        mask = np.ones(np.prod(shape))
         n_mask = int(np.prod(shape) / self.n)
-    
+
         # make sure as many as n_mask samples are masked
         mask[:n_mask] = 0
 
-        mask = torch.reshape(mask, shape)
-
-        # permute rows
+        # permute elements
         mask = np.random.permutation(mask)
 
-        # permute columns
-        mask = mask[:, np.random.permutation(mask.shape[1])]
+        # reshape to the input shape
+        mask = torch.tensor(mask).reshape(shape)
         
-        return torch.tensor(mask)
+        return mask
