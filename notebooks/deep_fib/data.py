@@ -26,14 +26,20 @@ class DeepFIBDataset(Dataset):
 
     def _mask(self, shape: Tuple[int, int]) -> torch.Tensor:
         """Pointwise Masking"""
+        
+        mask = torch.ones(np.prod(shape))
+    
         n_mask = int(np.prod(shape) / self.n)
+    
+        # make sure as many as n_mask samples are masked
+        mask[:n_mask] = 0
 
-        # TODO: make it works without replacements
-        # get column indices for the features to mask
-        col_idxs = np.random.choice(range(shape[1]), n_mask, replace=True)
-        # get row indices for the samples to mask
-        row_idxs = np.random.choice(range(shape[0]), n_mask, replace=True)
+        mask = torch.reshape(mask, shape)
 
-        mask = torch.ones(shape)
-        mask[row_idxs, col_idxs] = 0
+        # permute rows
+        mask = np.random.permutation(mask)
+
+        # permute columns
+        mask = mask[:, np.random.permutation(mask.shape[1])]
+        
         return mask
