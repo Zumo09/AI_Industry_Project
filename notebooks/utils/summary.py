@@ -1,4 +1,3 @@
-import logging
 import os
 from time import time
 from typing import Dict
@@ -11,14 +10,6 @@ Scalars = Dict[str, Dict[str, Dict[int, float]]]
 
 SCALARS = "scalars"
 JSON_EXT = ".json"
-
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-
-def _dd() -> Dict[str, Dict[str, float]]:
-    return defaultdict(OrderedDict)
 
 
 class SummaryWriter:
@@ -45,8 +36,7 @@ class SummaryWriter:
         if not os.path.isdir(self.log_dir):
             os.mkdir(self.log_dir)
 
-
-        self.scalars: Scalars = defaultdict(_dd)  # type: ignore
+        self.scalars: Scalars = defaultdict(lambda: defaultdict(OrderedDict))
 
     def _auto_flush(self):
         self.steps += 1
@@ -80,14 +70,7 @@ class SummaryWriter:
         "Save the content as tensorboard events"
         from torch.utils.tensorboard.writer import SummaryWriter as SW
 
-        dirs = self.log_dir.split(os.path.sep)
-        base = os.path.sep.join(dirs[:-2])
-        path = os.path.join(base, "tensorboard", dirs[-2])
-
-        if os.path.isdir(path):
-            import shutil
-
-            shutil.rmtree(path)
+        path = os.path.join(self.log_dir, "tb")
 
         with SW(path, max_queue=10000) as writer:
 
