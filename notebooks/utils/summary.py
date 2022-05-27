@@ -1,10 +1,12 @@
-import os
-from time import time
 from typing import Dict
-
+import os
+import shutil
 import json
-
+from time import time
 from collections import defaultdict, OrderedDict
+
+from torch.utils.tensorboard.writer import SummaryWriter as _SummaryWriter
+
 
 Scalars = Dict[str, Dict[str, Dict[int, float]]]
 
@@ -68,11 +70,12 @@ class SummaryWriter:
 
     def to_tensorboard(self):
         "Save the content as tensorboard events"
-        from torch.utils.tensorboard.writer import SummaryWriter as SW
-
         path = os.path.join(self.log_dir, "tb")
 
-        with SW(path, max_queue=10000) as writer:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+
+        with _SummaryWriter(path, max_queue=10000) as writer:
 
             for main_tag, df in self.scalars.items():
                 for tag, ds in df.items():

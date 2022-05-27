@@ -24,7 +24,7 @@ def unfold(
             t = t.unfold(0, horizon, horizon//2).permute(0, 2, 1)
         else:
             t = pad(t, horizon)
-        ret.append((t[..., :-1], t[..., -1]))
+        ret.extend((t[i, ..., :-1], t[i, ..., -1]) for i in range(len(t)))
     return ret
 
 
@@ -62,7 +62,7 @@ class DeepFIBDataset(Dataset):
     ) -> None:
         self.dataset = unfold(marconi_dataset, horizon)
         self.n = num_sample_per_data
-        self.masks = masks(self.dataset[0][0].shape[1:], num_sample_per_data)
+        self.masks = masks(self.dataset[0][0].shape, num_sample_per_data)
 
     def __len__(self) -> int:
         return len(self.dataset) * self.n
@@ -74,7 +74,7 @@ class DeepFIBDataset(Dataset):
         mask_idx = index % self.n
         data, label = self.dataset[data_idx]
         mask = self.masks[mask_idx]
-        return data, mask, label
+        return data.float(), mask.float(), label
 
 
 # class DeepFIBDataset(Dataset):
