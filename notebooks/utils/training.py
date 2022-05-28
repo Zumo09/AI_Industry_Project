@@ -1,3 +1,4 @@
+import os
 from typing import Callable, Dict, Optional, Tuple
 
 import torch
@@ -87,4 +88,4 @@ def training_loop(
         print(log_str)
 
         if save_path is not None:
-            save_model(model, save_path + f"model_{epoch}.pth")
+            save_model(model, os.path.join(save_path, f"model_{epoch}.pth"))
