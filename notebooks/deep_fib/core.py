@@ -14,7 +14,7 @@ def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
 
 def step_function(
     model: torch.nn.Module, batch: Dict[str, Tensor]
-) -> Tuple[Tensor, Tensor]:
+) -> Dict[str, Tensor]:
     inputs = batch["data"]
     masks = batch["mask"]
     labels = batch["label"]
@@ -27,4 +27,4 @@ def step_function(
     f1 = f1_score(errors.detach(), labels.to(torch.int))
     loss = errors.mean()
 
-    return f1, loss
+    return dict(f1=f1, loss=loss)
