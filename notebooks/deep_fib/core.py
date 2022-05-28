@@ -12,7 +12,7 @@ def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
     return torch.linalg.norm(preds - targets, ord=1, dim=-1)
 
 
-def step_function(
+def train_step(
     model: torch.nn.Module, batch: Dict[str, Tensor]
 ) -> Dict[str, Tensor]:
     inputs = batch["data"]
@@ -28,3 +28,10 @@ def step_function(
     loss = errors.mean()
 
     return dict(f1=f1, loss=loss)
+
+
+@torch.no_grad()
+def test_step(
+    model: torch.nn.Module, batch: Dict[str, Tensor]
+) -> Dict[str, Tensor]:
+    return train_step(model, batch)
