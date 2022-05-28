@@ -1,4 +1,5 @@
-from typing import Callable, Dict, Optional, Protocol
+from abc import ABC
+from typing import Callable, Dict, Optional  # , Protocol
 from collections import defaultdict
 import os
 
@@ -17,7 +18,7 @@ from .modutils import save_model
 StepFunction = Callable[[Module, Dict[str, torch.Tensor]], Dict[str, Tensor]]
 
 
-class SummaryWriter(Protocol):
+class SummaryWriter(ABC):
     def add_scalars(
         self,
         main_tag: str,
