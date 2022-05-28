@@ -152,3 +152,11 @@ cython_debug/
 #.idea/
 
 # *.gzip
+
+# Tensorboard events
+
+tb/
+
+# Trash folder 
+
+trash/

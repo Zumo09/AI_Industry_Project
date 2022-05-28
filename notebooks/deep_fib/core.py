@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Dict, Tuple
 
 import torch
 from torch import Tensor
@@ -13,13 +13,14 @@ def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
 
 
 def step_function(
-    model: torch.nn.Module, batch: Tuple[Tensor, ...]
+    model: torch.nn.Module, batch: Dict[str, Tensor]
 ) -> Tuple[Tensor, Tensor]:
-    inputs: Tensor = batch[0]
-    masks: Tensor = batch[1]
-    labels: Tensor = batch[2]
+    inputs = batch["data"]
+    masks = batch["mask"]
+    labels = batch["label"]
     targets = inputs.detach().clone()
     inputs[masks == 0] = MASK
+
     preds = model(inputs)
 
     errors = reconstruction_error(preds, targets)

@@ -64,7 +64,7 @@ class SCINetBlock(nn.Module):
 
     @staticmethod
     def split(x: Tensor) -> Tuple[Tensor, Tensor]:
-        return x[:, ::2, :], x[:, 1::2, :]
+        return x[:, ::2, :].clone(), x[:, 1::2, :].clone()
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         eve, odd = self.split(x)
@@ -116,7 +116,9 @@ class EncoderTree(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, input_len: int, output_len: int, hidden_sizes: Optional[List[int]] = None) -> None:
+    def __init__(
+        self, input_len: int, output_len: int, hidden_sizes: Optional[List[int]] = None
+    ) -> None:
         super().__init__()
         lens = [input_len]
         if hidden_sizes is not None:

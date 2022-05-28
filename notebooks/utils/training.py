@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -12,7 +12,7 @@ from tqdm import tqdm
 from .summary import SummaryWriter
 from .modutils import save_model
 
-StepFunction = Callable[[Module, Tuple[Tensor, ...]], Tuple[Tensor, Tensor]]
+StepFunction = Callable[[Module, Dict[str, torch.Tensor]], Tuple[Tensor, Tensor]]
 
 
 def training_loop(
@@ -37,7 +37,9 @@ def training_loop(
         train_loss = 0
         train_f1 = 0
         for batch in tqdm(train_dataloader, leave=False, desc=f"Train {epoch}"):
-            batch = tuple(d.to(device) for d in batch)
+            batch = {
+                k: d.to(device) for k, d in batch.items()
+            }  # type: Dict[str, Tensor]
 
             optimizer.zero_grad()
 
@@ -57,7 +59,9 @@ def training_loop(
         test_loss = 0
         test_f1 = 0
         for batch in tqdm(test_dataloader, leave=False, desc=f"Test {epoch}"):
-            batch = tuple(d.to(device) for d in batch)
+            batch = {
+                k: d.to(device) for k, d in batch.items()
+            }  # type: Dict[str, Tensor]
 
             with torch.no_grad():
                 f1, loss = step_function(model, batch)
@@ -71,7 +75,10 @@ def training_loop(
             )
             writer.add_scalars("f1_score", {"train": train_f1, "test": test_f1}, epoch)
 
-        log_str = f"Epoch {epoch} - loss = {train_loss} ({test_loss}) - f1_score = {train_f1} ({test_f1})"
+        log_str = (
+            f"Epoch {epoch} - loss = {train_loss:.3f} ({test_loss:.3f}) "
+            f"- f1_score = {train_f1:.3f} ({test_f1:.3f})"
+        )
         if lr_scheduler is not None:
             lrs = ", ".join(f"{lr:.2e}" for lr in lr_scheduler.get_last_lr())
             log_str += f" - lr = {lrs}"
