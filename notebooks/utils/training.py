@@ -1,7 +1,6 @@
+from typing import Callable, Dict, Optional, Protocol
 from collections import defaultdict
 import os
-from typing import Callable, Dict, Optional, Tuple, Protocol
-import numpy as np
 
 import torch
 from torch import Tensor
@@ -10,6 +9,7 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import _LRScheduler
 
+import numpy as np
 from tqdm import tqdm
 
 from .modutils import save_model
