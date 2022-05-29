@@ -14,7 +14,13 @@ from tqdm import tqdm
 
 from .modutils import save_model
 
-StepFunction = Callable[[Module, Dict[str, Tensor]], Dict[str, Tensor]]
+
+class Engine(Protocol):
+    def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        raise NotImplementedError()
+
+    def test_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        raise NotImplementedError()
 
 
 class SummaryWriter(Protocol):
@@ -27,8 +33,7 @@ class SummaryWriter(Protocol):
 def training_loop(
     *,
     model: Module,
-    train_step_function: StepFunction,
-    test_step_function: StepFunction,
+    engine: Engine,
     num_epochs: int,
     train_dataloader: DataLoader,
     test_dataloader: DataLoader,
@@ -55,7 +60,7 @@ def training_loop(
 
             optimizer.zero_grad()
 
-            rets = train_step_function(model, batch)
+            rets = engine.train_step(model, batch)
 
             rets["loss"].backward()
             optimizer.step()
@@ -74,7 +79,7 @@ def training_loop(
             }  # type: Dict[str, Tensor]
 
             with torch.no_grad():
-                rets = test_step_function(model, batch)
+                rets = engine.test_step(model, batch)
 
             for tag, val in rets.items():
                 test_scalars[tag].append(float(val))

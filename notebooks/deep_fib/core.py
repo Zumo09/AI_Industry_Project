@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict
 
 import torch
 from torch import Tensor
@@ -9,23 +9,51 @@ MASK = -1
 
 
 def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
-    return torch.linalg.norm(preds - targets, ord=1, dim=-1)
+    num_cols = targets.size(-1)
+    return torch.linalg.norm(preds - targets, ord=1, dim=-1) / num_cols
 
 
-def train_step(model: torch.nn.Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
-    inputs = batch["data"]
-    masks = batch["mask"]
-    targets = inputs.detach().clone()
-    inputs[masks == 0] = MASK
+class DeepFIBEngine:
+    def __init__(self, anomaly_threshold: float):
+        self.anomaly_threshold = anomaly_threshold
 
-    preds = model(inputs)
+    def train_step(
+        self, model: torch.nn.Module, batch: Dict[str, Tensor]
+    ) -> Dict[str, Tensor]:
+        inputs = batch["data"]
+        masks = batch["mask"]
+        targets = inputs.detach().clone()
+        inputs[masks == 0] = MASK
 
-    errors = reconstruction_error(preds, targets)
-    loss = errors.mean()
+        preds = model(inputs)
 
-    return dict(loss=loss)
+        errors = reconstruction_error(preds, targets)
+        loss = errors.mean()
+
+        return dict(loss=loss)
+
+    @torch.no_grad()
+    def test_step(
+        self, model: torch.nn.Module, batch: Dict[str, Tensor]
+    ) -> Dict[str, Tensor]:
+        inputs = batch["data"]
+        labels = batch["label"]
+        targets = inputs.detach().clone()
+
+        preds = model(inputs)
+
+        errors = reconstruction_error(preds, targets)
+        loss = errors.mean()
+
+        f1 = f1_score(preds, labels, threshold=self.anomaly_threshold)
+
+        return dict(loss=loss, f1=f1)
 
 
-@torch.no_grad()
-def test_step(model: torch.nn.Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
-    return train_step(model, batch)
+if __name__ == "__main__":
+    pred = torch.ones(2, 5, 3)
+    targ = torch.zeros(2, 5, 3)
+
+    print(pred)
+    print(targ)
+    print(reconstruction_error(pred, targ))
