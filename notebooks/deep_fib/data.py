@@ -60,13 +60,18 @@ def unfolded_indexes(
 
 class DeepFIBDataset(Dataset):
     def __init__(
-        self, marconi_dataset: Marconi100Dataset, horizon: int, num_sample_per_data: int
+        self,
+        marconi_dataset: Marconi100Dataset,
+        *,
+        horizon: int,
+        stride: int,
+        n_masks: int = 1,
     ) -> None:
         self.dataset = marconi_dataset
-        self.indexes = unfolded_indexes(marconi_dataset, horizon, horizon // 2)
-        self.n = num_sample_per_data
+        self.indexes = unfolded_indexes(marconi_dataset, horizon, stride)
+        self.n = n_masks
         self.win_len = horizon
-        self.masks = masks((horizon, NUM_FEATURES), num_sample_per_data).float()
+        self.masks = masks((horizon, NUM_FEATURES), n_masks).float()
 
     def __len__(self) -> int:
         return len(self.indexes) * self.n
