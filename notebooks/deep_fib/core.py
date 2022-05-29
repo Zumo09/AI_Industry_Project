@@ -38,13 +38,23 @@ class DeepFIBEngine:
     ) -> Dict[str, Tensor]:
         inputs = batch["data"]
         labels = batch["label"]
+
+        preds = self.detect_anomalies(model, inputs)
+        loss = preds["errors"].mean()
+
+        f1 = f1_score(preds["labels"], labels, threshold=self.anomaly_threshold)
+
+        return dict(loss=loss, f1=f1)
+
+    @torch.no_grad()
+    def detect_anomalies(
+        self, model: torch.nn.Module, inputs: Tensor
+    ) -> Dict[str, Tensor]:
         targets = inputs.detach().clone()
 
         preds = model(inputs)
 
         errors = reconstruction_error(preds, targets)
-        loss = errors.mean()
+        labels = (errors.detach() > self.anomaly_threshold).to(torch.int)
 
-        f1 = f1_score(errors, labels, threshold=self.anomaly_threshold)
-
-        return dict(loss=loss, f1=f1)
+        return dict(errors=errors, labels=labels)
