@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from .modutils import save_model
 
-StepFunction = Callable[[Module, Dict[str, torch.Tensor]], Dict[str, Tensor]]
+StepFunction = Callable[[Module, Dict[str, Tensor]], Dict[str, Tensor]]
 
 
 class SummaryWriter(Protocol):
