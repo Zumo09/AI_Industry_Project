@@ -19,10 +19,7 @@ StepFunction = Callable[[Module, Dict[str, Tensor]], Dict[str, Tensor]]
 
 class SummaryWriter(Protocol):
     def add_scalars(
-        self,
-        main_tag: str,
-        tag_scalar_dict: Dict[str, float],
-        global_step: int,
+        self, main_tag: str, tag_scalar_dict: Dict[str, float], global_step: int,
     ) -> None:
         """Add scalars to the buffer"""
 

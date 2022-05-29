@@ -1,5 +1,6 @@
 import torch
 
+
 def load_model(
     base_model: torch.nn.Module, load_path: str, device: torch.device
 ) -> torch.nn.Module:

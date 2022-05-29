@@ -4,6 +4,7 @@
 from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
+
 # from sklearn.neighbors import KernelDensity
 # from sklearn.model_selection import GridSearchCV
 # from tensorflow import keras
@@ -18,75 +19,77 @@ import numpy as np
 # Configuration
 figsize = (9, 3)
 
-def plot_dataframe(data, labels=None, vmin=-1.96, vmax=1.96,
-        figsize=figsize, autoclose=True, s=4):
-    if autoclose: plt.close('all')
+
+def plot_dataframe(
+    data, labels=None, vmin=-1.96, vmax=1.96, figsize=figsize, autoclose=True, s=4
+):
+    if autoclose:
+        plt.close("all")
     plt.figure(figsize=figsize)
-    plt.imshow(data.T.iloc[:, :], aspect='auto',
-            cmap='RdBu', vmin=vmin, vmax=vmax)
+    plt.imshow(data.T.iloc[:, :], aspect="auto", cmap="RdBu", vmin=vmin, vmax=vmax)
     if labels is not None:
         # nonzero = data.index[labels != 0]
         ncol = len(data.columns)
-        lvl = - 0.05 * ncol
+        lvl = -0.05 * ncol
         # plt.scatter(nonzero, lvl*np.ones(len(nonzero)),
         #         s=s, color='tab:orange')
-        plt.scatter(labels.index, np.ones(len(labels)) * lvl,
-                s=s,
-                color=plt.get_cmap('tab10')(labels))
+        plt.scatter(
+            labels.index,
+            np.ones(len(labels)) * lvl,
+            s=s,
+            color=plt.get_cmap("tab10")(labels),
+        )
     plt.tight_layout()
 
 
-def plot_series(series, labels=None,
-        figsize=figsize, autoclose=True, s=4):
+def plot_series(series, labels=None, figsize=figsize, autoclose=True, s=4):
     if autoclose:
-        plt.close('all')
+        plt.close("all")
     plt.figure(figsize=figsize)
-    plt.plot(series.index, series, label='data')
+    plt.plot(series.index, series, label="data")
     if labels is not None:
         # nonzero = series.index[labels != 0]
-        smin, smax = np.min(series),  np.max(series)
-        lvl = smin - 0.05 * (smax-smin)
+        smin, smax = np.min(series), np.max(series)
+        lvl = smin - 0.05 * (smax - smin)
         # plt.scatter(nonzero, np.ones(len(nonzero)) * lvl,
         #         s=s,
         #         color='tab:orange')
-        plt.scatter(labels.index, np.ones(len(labels)) * lvl,
-                s=s,
-                color=plt.get_cmap('tab10')(labels))
+        plt.scatter(
+            labels.index,
+            np.ones(len(labels)) * lvl,
+            s=s,
+            color=plt.get_cmap("tab10")(labels),
+        )
     plt.tight_layout()
 
 
 def plot_stoch_series(data, figsize=figsize, autoclose=True):
     if autoclose:
-        plt.close('all')
+        plt.close("all")
     plt.figure(figsize=figsize)
     means = np.mean(data.values, axis=1)
     stds = np.std(data.values, axis=1)
-    plt.plot(data.index, means, label='mean')
-    plt.fill_between(data.index,
-            means-stds,
-            means+stds,
-            alpha=0.1,
-            label='min-max')
+    plt.plot(data.index, means, label="mean")
+    plt.fill_between(data.index, means - stds, means + stds, alpha=0.1, label="min-max")
     plt.tight_layout()
 
 
-def plot_signal(signal, labels=None,
-        figsize=figsize, autoclose=True, s=4):
+def plot_signal(signal, labels=None, figsize=figsize, autoclose=True, s=4):
     if autoclose:
-        plt.close('all')
+        plt.close("all")
     plt.figure(figsize=figsize)
-    plt.plot(signal.index, signal, label='signal')
+    plt.plot(signal.index, signal, label="signal")
     if labels is not None:
         nonzero = signal.index[labels != 0]
-        smin, smax = np.min(signal),  np.max(signal)
-        lvl = smin - 0.05 * (smax-smin)
-        plt.scatter(nonzero, np.ones(len(nonzero)) * lvl,
-                s=s, color='tab:orange')
+        smin, smax = np.min(signal), np.max(signal)
+        lvl = smin - 0.05 * (smax - smin)
+        plt.scatter(nonzero, np.ones(len(nonzero)) * lvl, s=s, color="tab:orange")
     plt.tight_layout()
 
 
 def plot_bars(data, figsize=figsize, autoclose=True, tick_gap=1):
-    if autoclose: plt.close('all')
+    if autoclose:
+        plt.close("all")
     plt.figure(figsize=figsize)
     x = 0.5 + np.arange(len(data))
     plt.bar(x, data, width=0.7)
@@ -95,23 +98,22 @@ def plot_bars(data, figsize=figsize, autoclose=True, tick_gap=1):
     plt.tight_layout()
 
 
-def plot_training_history(history, 
-        figsize=figsize, autoclose=True):
+def plot_training_history(history, figsize=figsize, autoclose=True):
     if autoclose:
-        plt.close('all')
+        plt.close("all")
     plt.figure(figsize=figsize)
-    plt.plot(history.history['loss'], label='loss')
-    if 'val_loss' in history.history.keys():
-        plt.plot(history.history['val_loss'], label='val. loss')
+    plt.plot(history.history["loss"], label="loss")
+    if "val_loss" in history.history.keys():
+        plt.plot(history.history["val_loss"], label="val. loss")
         plt.legend()
     plt.tight_layout()
 
 
-def plot_distribution_2D(estimator=None, samples=None,
-        xr=None, yr=None,
-        figsize=figsize, autoclose=True):
+def plot_distribution_2D(
+    estimator=None, samples=None, xr=None, yr=None, figsize=figsize, autoclose=True
+):
     if autoclose:
-        plt.close('all')
+        plt.close("all")
     plt.figure(figsize=figsize)
     if samples is not None:
         plt.scatter(samples[:, 0], samples[:, 1], alpha=0.3)
@@ -127,7 +129,7 @@ def plot_distribution_2D(estimator=None, samples=None,
         data = np.vstack((xc, yc)).T
         dvals = np.exp(estimator.score_samples(data))
         dvals = dvals.reshape((nx, ny))
-        plt.imshow(dvals.T[::-1, :], aspect='auto')
+        plt.imshow(dvals.T[::-1, :], aspect="auto")
         plt.xticks(np.linspace(0, len(xr), 5), np.linspace(xr[0], xr[-1], 5))
         plt.xticks(np.linspace(0, len(yr), 5), np.linspace(yr[0], yr[-1], 5))
     plt.tight_layout()
@@ -139,9 +141,9 @@ def get_errors(signal, labels, thr, tolerance=1):
 
     fp = set(pred)
     fn = set(anomalies)
-    for lag in range(-tolerance, tolerance+1):
-        fp = fp - set(anomalies+lag)
-        fn = fn - set(pred+lag)
+    for lag in range(-tolerance, tolerance + 1):
+        fp = fp - set(anomalies + lag)
+        fn = fn - set(pred + lag)
     return fp, fn
 
 
@@ -234,7 +236,7 @@ def collect_training(data, tr_ts_ratio):
 #     return ts_cost
 
 # def coupling(input_shape, nunits=64, nhidden=2, reg=0.01):
-#     assert(nhidden >= 0)    
+#     assert(nhidden >= 0)
 #     x = keras.layers.Input(shape=input_shape)
 #     # Build the layers for the t transformation (translation)
 #     t = x
@@ -317,7 +319,6 @@ def collect_training(data, tr_ts_ratio):
 #         return {"loss": self.loss_tracker.result()}
 
 
-
 # def plot_rnvp_transformation(rnvp, xr=None, yr=None,
 #         figsize=figsize, autoclose=True):
 #     if autoclose:
@@ -351,5 +352,4 @@ def collect_training(data, tr_ts_ratio):
 #                 color='tab:orange', s=4, zorder=1)
 #     plt.legend([xh, zh], ['x', 'z'])
 #     plt.tight_layout()
-
 

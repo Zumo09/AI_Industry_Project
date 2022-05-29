@@ -48,10 +48,7 @@ class SummaryWriter:
             self.timer = time()
 
     def add_scalars(
-        self,
-        main_tag: str,
-        tag_scalar_dict: Dict[str, float],
-        global_step: int,
+        self, main_tag: str, tag_scalar_dict: Dict[str, float], global_step: int,
     ) -> None:
         main_dict = self.scalars[main_tag]
 

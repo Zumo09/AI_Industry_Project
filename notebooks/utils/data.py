@@ -32,7 +32,9 @@ def get_train_test_split(
 class Marconi100Dataset(Dataset):
     def __init__(self, paths: List[str], normalize: bool = True) -> None:
         super().__init__()
-        self.data = [self._load(path, normalize) for path in tqdm(paths, desc="Loading")]
+        self.data = [
+            self._load(path, normalize) for path in tqdm(paths, desc="Loading")
+        ]
 
     @staticmethod
     def _load(path: str, normalize: bool) -> Tuple[pd.DataFrame, pd.Series]:
@@ -43,9 +45,10 @@ class Marconi100Dataset(Dataset):
         data = df.drop(["timestamp", "label", "New_label"], axis=1)
         if normalize:
             data = (data - data.mean()) / (data.std() + 1e-5)
-        return pd.DataFrame(
-            data.values, index=timestamps, columns=data.columns
-        ), pd.Series(label.values, index=timestamps)
+        return (
+            pd.DataFrame(data.values, index=timestamps, columns=data.columns),
+            pd.Series(label.values, index=timestamps),
+        )
 
     def __len__(self) -> int:
         return len(self.data)
