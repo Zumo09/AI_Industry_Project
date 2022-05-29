@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from utils.data import Marconi100Dataset, COLS
+from utils.data import Marconi100Dataset, NUM_FEATURES
 
 
 def masks(shape: Tuple[int, int], n: int) -> torch.Tensor:
@@ -66,7 +66,7 @@ class DeepFIBDataset(Dataset):
         self.indexes = unfolded_indexes(marconi_dataset, horizon, horizon // 2)
         self.n = num_sample_per_data
         self.win_len = horizon
-        self.masks = masks((horizon, COLS), num_sample_per_data).float()
+        self.masks = masks((horizon, NUM_FEATURES), num_sample_per_data).float()
 
     def __len__(self) -> int:
         return len(self.indexes) * self.n

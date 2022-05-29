@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
 
 DATASET_PATH = os.path.join("..", "data")
-COLS = 460
+NUM_FEATURES = 460
 
 
 def get_dataset_paths() -> List[str]:
