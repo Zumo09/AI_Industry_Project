@@ -33,7 +33,7 @@ class DeepFIBEngine:
         return dict(loss=loss)
 
     @torch.no_grad()
-    def test_step(
+    def validation_step(
         self, model: torch.nn.Module, batch: Dict[str, Tensor]
     ) -> Dict[str, Tensor]:
         inputs = batch["data"]

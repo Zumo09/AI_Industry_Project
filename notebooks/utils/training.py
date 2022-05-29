@@ -19,7 +19,9 @@ class Engine(Protocol):
     def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         raise NotImplementedError()
 
-    def test_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def validation_step(
+        self, model: Module, batch: Dict[str, Tensor]
+    ) -> Dict[str, Tensor]:
         raise NotImplementedError()
 
 
@@ -79,7 +81,7 @@ def training_loop(
             }  # type: Dict[str, Tensor]
 
             with torch.no_grad():
-                rets = engine.test_step(model, batch)
+                rets = engine.validation_step(model, batch)
 
             for tag, val in rets.items():
                 test_scalars[tag].append(float(val))
