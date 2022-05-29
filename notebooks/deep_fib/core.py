@@ -45,15 +45,6 @@ class DeepFIBEngine:
         errors = reconstruction_error(preds, targets)
         loss = errors.mean()
 
-        f1 = f1_score(preds, labels, threshold=self.anomaly_threshold)
+        f1 = f1_score(errors, labels, threshold=self.anomaly_threshold)
 
         return dict(loss=loss, f1=f1)
-
-
-if __name__ == "__main__":
-    pred = torch.ones(2, 5, 3)
-    targ = torch.zeros(2, 5, 3)
-
-    print(pred)
-    print(targ)
-    print(reconstruction_error(pred, targ))
