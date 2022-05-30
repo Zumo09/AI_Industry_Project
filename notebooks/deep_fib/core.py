@@ -12,6 +12,8 @@ def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
     num_cols = targets.size(-1)
     return torch.linalg.norm(preds - targets, ord=1, dim=-1) / num_cols
 
+def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
+    return torch.sum(torch.abs(preds - targets))
 
 class DeepFIBEngine:
     def __init__(self, anomaly_threshold: float):
@@ -37,15 +39,30 @@ class DeepFIBEngine:
         self, model: torch.nn.Module, batch: Dict[str, Tensor]
     ) -> Dict[str, Tensor]:
         inputs = batch["data"]
+        targets = inputs.detach().clone()
         labels = batch["label"]
-
+        
         preds = self.detect_anomalies(model, inputs)
-        loss = preds["errors"].mean()
-
+        mean_residual_error = preds["errors"].mean()
+        reconstruction_errors = reconstruction_error(preds, targets)
+        reconstruction_loss = reconstruction_errors.mean()
+        
         f1 = f1_score(preds["labels"], labels, threshold=self.anomaly_threshold)
 
-        return dict(loss=loss, f1=f1)
-
+        return dict(reconstruction_loss=reconstruction_loss, f1=f1, mre=mean_residual_error)
+    
+    @torch.no_grad()
+    def test_step(
+        self, model: torch.nn.Module, batch: Dict[str, Tensor]
+    ) -> Dict[str, Tensor]:
+        inputs = batch["data"]
+        targets = inputs.detach().clone()
+        
+        preds = self.detect_anomalies(model, inputs)
+        mean_residual_error = preds["errors"].mean()
+        
+        return dict(mre=mean_residual_error, preds=preds)
+    
     @torch.no_grad()
     def detect_anomalies(
         self, model: torch.nn.Module, inputs: Tensor
@@ -54,7 +71,7 @@ class DeepFIBEngine:
 
         preds = model(inputs)
 
-        errors = reconstruction_error(preds, targets)
+        errors = residual_error(preds, targets)
         labels = (errors.detach() > self.anomaly_threshold).to(torch.int)
 
         return dict(errors=errors, labels=labels)
