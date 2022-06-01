@@ -34,8 +34,8 @@ class DeepFIBEngine:
         sample_masks = random.choices(self.masks, k = 32)
         
         masked_inputs = []
-        for mask, elem in zip(sample_masks, batch["data"]):
-            masked_input = elem
+        for (mask, elem) in zip(sample_masks, inputs):
+            masked_input = elem.detach().clone
             masked_input[mask == 0] = MASK
             masked_inputs.append(masked_input)
             

@@ -27,7 +27,7 @@ def get_masks(horizon: int, n: int) -> torch.Tensor:
         mask = torch.tensor(mask).reshape(shape)
         masks.append(mask)
 
-    return masks
+    return torch.stack(masks)
 
 
 def unfolded_indexes(
