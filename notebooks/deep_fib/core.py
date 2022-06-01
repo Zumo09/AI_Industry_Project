@@ -2,10 +2,11 @@ from typing import Dict
 
 import torch
 from torch import Tensor
+import random
 
 from torchmetrics.functional import f1_score
 
-from .data import masks
+from .data import get_masks
 from ..utils.data import NUM_FEATURES
 
 MASK = -1
@@ -28,12 +29,21 @@ class DeepFIBEngine:
         self, model: torch.nn.Module, batch: Dict[str, Tensor]
     ) -> Dict[str, Tensor]:
         inputs = batch["data"]
-        # Sample a batch of masks
-        # TODO
+        # Sample a batch of masks with replacement
+        # 32 should be replaced with the size of the batch (32)
+        sample_masks = random.choices(self.masks, k = 32)
+        
+        masked_inputs = []
+        for mask, elem in zip(sample_masks, batch["data"]):
+            masked_input = elem
+            masked_input[mask == 0] = MASK
+            masked_inputs.append(masked_input)
+            
+        
+        masked_inputs = np.array(masked_inputs)
         targets = inputs.detach().clone()
-        inputs[masks == 0] = MASK
 
-        preds = model(inputs)
+        preds = model(masked_inputs)
 
         errors = reconstruction_error(preds, targets)
         loss = errors.mean()
