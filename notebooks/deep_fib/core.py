@@ -7,7 +7,7 @@ import random
 from torchmetrics.functional import f1_score
 
 from .data import get_masks
-from ..utils.data import NUM_FEATURES
+from utils.data import NUM_FEATURES
 
 MASK = -1
 
