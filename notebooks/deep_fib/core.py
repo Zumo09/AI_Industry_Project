@@ -5,6 +5,9 @@ from torch import Tensor
 
 from torchmetrics.functional import f1_score
 
+from .data import masks
+from ..utils.data import NUM_FEATURES
+
 MASK = -1
 
 
@@ -17,14 +20,16 @@ def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
     # return torch.sum(torch.abs(preds - targets))
 
 class DeepFIBEngine:
-    def __init__(self, anomaly_threshold: float):
+    def __init__(self, anomaly_threshold: float, masks: Tensor):
         self.anomaly_threshold = anomaly_threshold
+        self.masks = masks
 
     def train_step(
         self, model: torch.nn.Module, batch: Dict[str, Tensor]
     ) -> Dict[str, Tensor]:
         inputs = batch["data"]
-        masks = batch["mask"]
+        # Sample a batch of masks
+        # TODO
         targets = inputs.detach().clone()
         inputs[masks == 0] = MASK
 

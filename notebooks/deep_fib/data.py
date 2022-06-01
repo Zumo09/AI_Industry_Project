@@ -6,8 +6,9 @@ from torch.utils.data import Dataset
 from utils.data import Marconi100Dataset, NUM_FEATURES
 
 
-def masks(shape: Tuple[int, int], n: int) -> torch.Tensor:
+def get_masks(horizon: int, n: int) -> torch.Tensor:
     """Pointwise non overlapping Masking"""
+    shape = (horizon, NUM_FEATURES)
     masks = []
     prod = np.prod(shape)
     n_mask = int(prod / n)
@@ -71,7 +72,6 @@ class DeepFIBDataset(Dataset):
         self.indexes = unfolded_indexes(marconi_dataset, horizon, stride)
         self.n = n_masks
         self.win_len = horizon
-        self.masks = masks((horizon, NUM_FEATURES), n_masks).float()
 
     def __len__(self) -> int:
         return len(self.indexes) * self.n
@@ -85,8 +85,37 @@ class DeepFIBDataset(Dataset):
         data_t = torch.tensor(data.to_numpy())[start:end].float()
         label_t = torch.tensor(label.to_numpy())[start:end].int()
 
-        mask = self.masks[mask_idx]
-        return {"data": data_t, "mask": mask, "label": label_t}
+        return {"data": data_t, "label": label_t}
+
+# class DeepFIBDataset(Dataset):
+#     def __init__(
+#         self,
+#         marconi_dataset: Marconi100Dataset,
+#         *,
+#         horizon: int,
+#         stride: int,
+#         n_masks: int = 1,
+#     ) -> None:
+#         self.dataset = marconi_dataset
+#         self.indexes = unfolded_indexes(marconi_dataset, horizon, stride)
+#         self.n = n_masks
+#         self.win_len = horizon
+#         self.masks = masks((horizon, NUM_FEATURES), n_masks).float()
+
+#     def __len__(self) -> int:
+#         return len(self.indexes) * self.n
+
+#     def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+#         data_idx = index // self.n
+#         mask_idx = index % self.n
+
+#         df_idx, (start, end) = self.indexes[data_idx]
+#         data, label = self.dataset[df_idx]
+#         data_t = torch.tensor(data.to_numpy())[start:end].float()
+#         label_t = torch.tensor(label.to_numpy())[start:end].int()
+
+#         mask = self.masks[mask_idx]
+#         return {"data": data_t, "mask": mask, "label": label_t}
 
 
 # import torch.nn.functional as F
