@@ -66,21 +66,16 @@ class DeepFIBDataset(Dataset):
         *,
         horizon: int,
         stride: int,
-        n_masks: int = 1,
     ) -> None:
         self.dataset = marconi_dataset
         self.indexes = unfolded_indexes(marconi_dataset, horizon, stride)
-        self.n = n_masks
         self.win_len = horizon
 
     def __len__(self) -> int:
-        return len(self.indexes) * self.n
+        return len(self.indexes)
 
     def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        data_idx = index // self.n
-        mask_idx = index % self.n
-
-        df_idx, (start, end) = self.indexes[data_idx]
+        df_idx, (start, end) = self.indexes[index]
         data, label = self.dataset[df_idx]
         data_t = torch.tensor(data.to_numpy())[start:end].float()
         label_t = torch.tensor(label.to_numpy())[start:end].int()
