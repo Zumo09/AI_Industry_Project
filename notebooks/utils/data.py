@@ -4,6 +4,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import Dataset
+from sklearn.preprocessing import MinMaxScaler
+from sklearn import preprocessing
 
 DATASET_PATH = os.path.join(os.getcwd(), "data")
 NUM_FEATURES = 460
@@ -19,29 +21,28 @@ def get_dataset_paths(dataset_base_path: str) -> List[str]:
 
 
 class Marconi100Dataset(Dataset):
-    def __init__(self, paths: List[str], normalize: Optional[str] = None) -> None:
+    def __init__(self, paths: List[str], scaling: Optional[str] = None) -> None:
         super().__init__()
-        self.data = [
-            self._load(path, normalize) for path in tqdm(paths, desc="Loading")
-        ]
+        self.data = [self._load(path, scaling) for path in tqdm(paths, desc="Loading")]
 
     @staticmethod
     def _load(
-        path: str, normalize: Optional[str] = None
+        path: str, scaling: Optional[str] = None
     ) -> Tuple[pd.DataFrame, pd.Series]:
         df = pd.read_parquet(path, engine="pyarrow")
         timestamps = df["timestamp"]
         label = df["New_label"].astype(int)
         label = label.replace(2, 1)  # labels were [0, 2], we want [0, 1]
         data = df.drop(["timestamp", "label", "New_label"], axis=1)
-        if normalize is not None:
-            if normalize == "normal":
+        if scaling is not None:
+            if scaling == "normal":
                 data = (data - data.mean()) / (data.std() + 1e-5)
-            elif normalize == "minmax":
-                # TODO
-                raise NotImplementedError()
+            elif scaling == "minmax":
+                scaler = MinMaxScaler()
+                cols = data.columns
+                data[cols] = scaler.fit_transform(data[cols])
             else:
-                raise ValueError(f"Normalization '{normalize}' not in (normal, minmax)")
+                raise ValueError(f"Scaling method '{scaling}' not in (normal, minmax)")
         return (
             pd.DataFrame(data.values, index=timestamps, columns=data.columns),
             pd.Series(label.values, index=timestamps),
