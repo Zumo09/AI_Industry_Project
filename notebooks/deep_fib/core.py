@@ -16,9 +16,10 @@ def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
 
 
 def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
+    num_cols = targets.size(-1)
     return torch.sum(
         torch.abs(preds - targets), dim=-1
-    )  # Do not reduce over time dimension, only columns dimension
+    ) / num_cols # Do not reduce over time dimension, only columns dimension
     # return torch.sum(torch.abs(preds - targets))
 
 
