@@ -132,7 +132,7 @@ class Decoder(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x = x.permute(0, 2, 1)
         x = self.fcn(x)
-        return x.permute(0, 2, 1)
+        return F.sigmoid(x.permute(0, 2, 1))
 
 
 class SCINet(nn.Module):
