@@ -10,7 +10,6 @@ from deep_fib.core import DeepFIBEngine
 
 from utils.data import Marconi100Dataset, get_dataset_paths
 from utils.training import training_loop
-from utils.summary import _SummaryWriter
 
 paths = get_dataset_paths("data")
 train, test = train_test_split(paths, test_size=0.1, random_state=42)
@@ -42,8 +41,13 @@ anomaly_threshold = 0.7
 
 dataset_train = DeepFIBDataset(m_data_train, horizon=horizon, stride=stride)
 dataset_test = DeepFIBDataset(m_data_test, horizon=horizon, stride=stride)
-
 masks = get_masks(horizon, n_masks).float()
+
+print("Datasets")
+print("Train: ", len(dataset_train))
+print("Test : ", len(dataset_test))
+print("Masks: ", len(masks))
+
 
 train_loader = DataLoader(
     dataset_train,
@@ -59,6 +63,10 @@ test_loader = DataLoader(
     num_workers=num_workers,
     persistent_workers=(num_workers != 0),
 )
+
+print("Dataloaders")
+print("Train: ", len(train_loader))
+print("Test : ", len(test_loader))
 
 model = SCINet(
     output_len=horizon,
