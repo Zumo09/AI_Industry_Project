@@ -54,7 +54,7 @@ class DeepFIBEngine:
         mre = errors.mean()
         labels = (errors > self.anomaly_threshold).to(torch.int)
         loss = reconstruction_error(preds, targets).mean()
-        f1 = f1_score(labels, gt_labels, threshold=self.anomaly_threshold)
+        f1 = f1_score(labels.flatten(), gt_labels.flatten())
 
         return dict(loss=loss, f1=f1, mre=mre)
 
