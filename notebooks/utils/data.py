@@ -4,7 +4,6 @@ import os
 import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import Dataset
-from sklearn.model_selection import train_test_split
 
 DATASET_PATH = os.path.join(os.getcwd(), "data")
 NUM_FEATURES = 460

@@ -14,6 +14,10 @@ from utils.training import training_loop
 paths = get_dataset_paths("data")
 train, test = train_test_split(paths, test_size=0.1, random_state=42)
 
+# train = train[:len(train)//30]
+# test = test[:len(test)//10]
+# len(train), len(test)
+
 m_data_train = Marconi100Dataset(train, normalize="normal")
 m_data_test = Marconi100Dataset(test, normalize="normal")
 
@@ -25,7 +29,7 @@ stride = 1000
 n_masks = 100
 
 batch_size = 32
-num_workers = 2
+num_workers = 0
 
 num_encoder_levels = 2
 
@@ -54,14 +58,14 @@ train_loader = DataLoader(
     batch_size,
     shuffle=True,
     num_workers=num_workers,
-    persistent_workers=(num_workers != 0),
+    # persistent_workers=(num_workers != 0),
 )
 test_loader = DataLoader(
     dataset_test,
     batch_size,
     shuffle=False,
     num_workers=num_workers,
-    persistent_workers=(num_workers != 0),
+    # persistent_workers=(num_workers != 0),
 )
 
 print("Dataloaders")
