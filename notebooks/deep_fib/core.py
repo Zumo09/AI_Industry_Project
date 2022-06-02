@@ -34,9 +34,7 @@ class DeepFIBEngine:
         sample_masks = torch.stack(random.choices(self.masks, k=batch_size))
 
         targets = inputs.detach().clone()
-        print(inputs.sum())
         inputs[sample_masks == 0] = MASK
-        print(inputs.sum())
 
         preds = model(inputs)
 
