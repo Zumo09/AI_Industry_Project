@@ -23,7 +23,7 @@ def _safe_divide(num: Tensor, denom: Tensor) -> Tensor:
     return num / denom
 
 
-def f1_score(preds: Tensor, target: Tensor) -> Tensor:
+def compute_metrics(preds: Tensor, target: Tensor) -> Dict[str, Tensor]:
     true_pred = target == preds
     false_pred = target != preds
     pos_pred = preds == 1
@@ -36,7 +36,9 @@ def f1_score(preds: Tensor, target: Tensor) -> Tensor:
     precision = _safe_divide(tp.float(), tp + fp)
     recall = _safe_divide(tp.float(), tp + fn)
 
-    return 2 * _safe_divide(precision * recall, precision + recall)
+    f1 = 2 * _safe_divide(precision * recall, precision + recall)
+
+    return dict(f1=f1, precision=precision, recall=recall)
 
 
 def true_positive_rate(preds: Tensor, target: Tensor) -> Tensor:
@@ -90,6 +92,7 @@ class DeepFIBEngine:
         labels = (errors > self.anomaly_threshold).to(torch.int)
         loss = reconstruction_error(preds, targets).mean()
         tpr = true_positive_rate(labels.flatten(), gt_labels.flatten())
+        metrics = compute_metrics(labels.flatten(), gt_labels.flatten())
         return dict(loss=loss, tpr=tpr, mre=mre)
 
     @torch.no_grad()
