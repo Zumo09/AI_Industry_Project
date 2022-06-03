@@ -26,7 +26,7 @@ class Engine(Protocol):
         raise NotImplementedError()
 
 
-class SummaryWriter(Protocol):
+class Writer(Protocol):
     def add_scalars(
         self, main_tag: str, tag_scalar_dict: Dict[str, float], global_step: int,
     ) -> None:
@@ -43,7 +43,7 @@ def training_loop(
     optimizer: Optimizer,
     device: torch.device,
     lr_scheduler: Optional[_LRScheduler] = None,
-    writer: Optional[SummaryWriter] = None,
+    writer: Optional[Writer] = None,
     save_path: Optional[str] = None,
 ) -> None:
     if save_path is not None:
@@ -57,10 +57,7 @@ def training_loop(
         train_scalars = defaultdict(list)
         test_scalars = defaultdict(list)
         for batch in tqdm(train_dataloader, leave=False, desc=f"Train {epoch}"):
-            batch = {
-                k: d.to(device) for k, d in batch.items()
-            }  # type: Dict[str, Tensor]
-
+            batch = {k: d.to(device) for k, d in batch.items()}
             optimizer.zero_grad()
 
             rets = engine.train_step(model, batch)
@@ -77,9 +74,7 @@ def training_loop(
 
         model.eval()
         for batch in tqdm(test_dataloader, leave=False, desc=f"Test {epoch}"):
-            batch = {
-                k: d.to(device) for k, d in batch.items()
-            }  # type: Dict[str, Tensor]
+            batch = {k: d.to(device) for k, d in batch.items()}
 
             with torch.no_grad():
                 rets = engine.val_step(model, batch)
