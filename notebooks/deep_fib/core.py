@@ -91,9 +91,9 @@ class DeepFIBEngine:
         mre = errors.mean()
         labels = (errors > self.anomaly_threshold).to(torch.int)
         loss = reconstruction_error(preds, targets).mean()
-        tpr = true_positive_rate(labels.flatten(), gt_labels.flatten())
         metrics = compute_metrics(labels.flatten(), gt_labels.flatten())
-        return dict(loss=loss, tpr=tpr, mre=mre)
+        metrics.update(dict(loss=loss, mre=mre))
+        return metrics
 
     @torch.no_grad()
     def test_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
