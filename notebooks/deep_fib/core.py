@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 
-# from torchmetrics.functional import f1_score
+from utils.metrics import compute_metrics
 
 
 def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
@@ -15,42 +15,6 @@ def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
 
 def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
     return torch.mean(torch.abs(preds - targets), dim=-1)
-
-
-def _safe_divide(num: Tensor, denom: Tensor) -> Tensor:
-    """prevent zero division."""
-    denom[denom == 0.0] = 1
-    return num / denom
-
-
-def compute_metrics(preds: Tensor, target: Tensor) -> Dict[str, Tensor]:
-    true_pred = target == preds
-    false_pred = target != preds
-    pos_pred = preds == 1
-    neg_pred = preds == 0
-
-    tp = (true_pred * pos_pred).sum()
-    fp = (false_pred * pos_pred).sum()
-    fn = (false_pred * neg_pred).sum()
-
-    precision = _safe_divide(tp.float(), tp + fp)
-    recall = _safe_divide(tp.float(), tp + fn)
-
-    f1 = 2 * _safe_divide(precision * recall, precision + recall)
-
-    return dict(f1=f1, precision=precision, recall=recall)
-
-
-def true_positive_rate(preds: Tensor, target: Tensor) -> Tensor:
-    true_pred = target == preds
-    false_pred = target != preds
-    pos_pred = preds == 1
-    neg_pred = preds == 0
-
-    tp = (true_pred * pos_pred).sum()
-    fn = (false_pred * neg_pred).sum()
-
-    return _safe_divide(tp.float(), tp + fn)
 
 
 class DeepFIBEngine:
