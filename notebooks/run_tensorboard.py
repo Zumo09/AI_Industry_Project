@@ -1,6 +1,6 @@
 import os
 
-logdir = "notebooks/deep_fib_outs/tb"
+logdir = "notebooks/outputs/deep_fib/tb"
 
 try:
     os.system(f"tensorboard --logdir={logdir}")
