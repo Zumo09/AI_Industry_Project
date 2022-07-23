@@ -21,7 +21,7 @@ class DeepFIBEngine:
     def __init__(
         self,
         anomaly_threshold: float,
-        masks: Optional[Tensor] = None,
+        masks: Tensor,
         mask_value: int = -1,
     ):
         self.anomaly_threshold = anomaly_threshold
@@ -29,7 +29,6 @@ class DeepFIBEngine:
         self.mask_value = mask_value
 
     def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        assert self.masks is not None, "Masks not initializes. Engine can't train'"
         inputs = batch["data"]
         batch_size = len(inputs)
         sample_masks = torch.stack(random.choices(self.masks, k=batch_size))

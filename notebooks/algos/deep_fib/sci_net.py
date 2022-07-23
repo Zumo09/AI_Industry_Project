@@ -4,7 +4,6 @@ https://github.com/cure-lab/SCINet
 Simplified to the level as descibed in the paper
 """
 from typing import List, Optional, Tuple
-from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -127,19 +126,16 @@ class Decoder(nn.Module):
         self, input_len: int, output_len: int, hidden_sizes: Optional[List[int]] = None
     ) -> None:
         super().__init__()
-        lens = [input_len]
-        if hidden_sizes is not None:
-            lens += hidden_sizes
-        lens.append(output_len)
-
-        self.fcn = nn.Sequential(
-            *(nn.Linear(i, o) for i, o in zip(lens[:-1], lens[1:]))
-        )
+        lens = [input_len] + (hidden_sizes or []) + [output_len]
+        layers = []
+        for i, o in zip(lens[:-1], lens[1:]):
+            layers += [nn.Linear(i, o), nn.ReLU()]
+        layers[-1] = nn.Sigmoid()
+        self.fcn = nn.Sequential(*layers)
 
     def forward(self, x: Tensor) -> Tensor:
         x = x.permute(0, 2, 1)
         x = self.fcn(x)
-        x = torch.sigmoid(x)  # F.sigmoid is deprecated
         return x.permute(0, 2, 1)
 
 
