@@ -19,16 +19,16 @@ class Engine(Protocol):
     def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         raise NotImplementedError()
 
-    def test_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        raise NotImplementedError()
-
     def val_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         raise NotImplementedError()
 
 
 class Writer(Protocol):
     def add_scalars(
-        self, main_tag: str, tag_scalar_dict: Dict[str, float], global_step: int,
+        self,
+        main_tag: str,
+        tag_scalar_dict: Dict[str, float],
+        global_step: int,
     ) -> None:
         """Add scalars to the buffer"""
 
