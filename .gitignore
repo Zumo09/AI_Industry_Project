@@ -153,6 +153,8 @@ cython_debug/
 
 # *.gzip
 
+.vscode/
+
 # Tensorboard events
 
 tb/

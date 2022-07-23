@@ -1,11 +1,11 @@
-from typing import Optional, Tuple, List
+from typing import Dict, Optional, Tuple, List
 import os
 
 import pandas as pd
+import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from sklearn.preprocessing import MinMaxScaler
-from sklearn import preprocessing
 
 DATASET_PATH = os.path.join(os.getcwd(), "data")
 NUM_FEATURES = 460
@@ -18,35 +18,6 @@ def get_dataset_paths(dataset_base_path: str) -> List[str]:
             continue
         paths.append(os.path.join(dataset_base_path, name))
     return paths
-
-
-def unfolded_indexes(
-    dataset: Marconi100Dataset, horizon: int, stride: int
-) -> List[Tuple[int, Tuple[int, int]]]:
-    """Return a list of tuples containing:
-    - the index of the dataframe in the marconi dataset
-    - the starting and ending indexes of the selected window
-
-    The dataframes with length less than horizon will be discarded
-        TODO: padding? (may be a problem maybe for what regard the padding method...
-        maybe a constant paddig might be raised as an anomaly)
-    """
-    indexes = []
-    for idx in range(len(dataset)):
-        df, _ = dataset[idx]
-        length = len(df)
-        if length < horizon:
-            continue
-        start = 0
-        end = start + horizon
-        while end < length:
-            indexes.append((idx, (start, end)))
-            start += stride
-            end = start + horizon
-        # keep last
-        indexes.append((idx, (length - 1 - horizon, length - 1)))
-
-    return indexes
 
 
 class Marconi100Dataset(Dataset):
@@ -83,6 +54,35 @@ class Marconi100Dataset(Dataset):
 
     def __getitem__(self, index: int) -> Tuple[pd.DataFrame, pd.Series]:
         return self.data[index]
+
+
+def unfolded_indexes(
+    dataset: Marconi100Dataset, horizon: int, stride: int
+) -> List[Tuple[int, Tuple[int, int]]]:
+    """Return a list of tuples containing:
+    - the index of the dataframe in the marconi dataset
+    - the starting and ending indexes of the selected window
+
+    The dataframes with length less than horizon will be discarded
+        TODO: padding? (may be a problem maybe for what regard the padding method...
+        maybe a constant paddig might be raised as an anomaly)
+    """
+    indexes = []
+    for idx in range(len(dataset)):
+        df, _ = dataset[idx]
+        length = len(df)
+        if length < horizon:
+            continue
+        start = 0
+        end = start + horizon
+        while end < length:
+            indexes.append((idx, (start, end)))
+            start += stride
+            end = start + horizon
+        # keep last
+        indexes.append((idx, (length - 1 - horizon, length - 1)))
+
+    return indexes
 
 
 class UnfoldedDataset(Dataset):

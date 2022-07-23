@@ -13,40 +13,31 @@ from torch import Tensor
 import numpy as np
 
 
-@dataclass(frozen=True)
-class SCIBlockCfg:
-    input_dim: int = 0
-    hidden_size: int = 1
-    kernel_size: int = 3
-    dropout: float = 0.5
-
-    @property
-    def pad_l(self) -> int:
-        return self._pad(2)
-
-    @property
-    def pad_r(self) -> int:
-        return self._pad(0)
-
-    def _pad(self, pad) -> int:
-        pad = pad if self.kernel_size % 2 == 0 else 1
-        return (self.kernel_size - pad) // 2 + 1
+def _pad(kernel_size: int, pad: int) -> int:
+    pad = pad if kernel_size % 2 == 0 else 1
+    return (kernel_size - pad) // 2 + 1
 
 
 class Interactor(nn.Sequential):
-    def __init__(self, cfg: SCIBlockCfg) -> None:
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_size: int,
+        kernel_size: int,
+        dropout: float,
+    ) -> None:
         super().__init__(
-            nn.ReplicationPad1d((cfg.pad_l, cfg.pad_r)),
+            nn.ReplicationPad1d((_pad(kernel_size, 2), _pad(kernel_size, 0))),
             nn.Conv1d(
-                in_channels=cfg.input_dim,
-                out_channels=cfg.input_dim * cfg.hidden_size,
-                kernel_size=cfg.kernel_size,
+                in_channels=input_dim,
+                out_channels=input_dim * hidden_size,
+                kernel_size=kernel_size,
             ),
             nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Dropout(cfg.dropout),
+            nn.Dropout(dropout),
             nn.Conv1d(
-                in_channels=cfg.input_dim * cfg.hidden_size,
-                out_channels=cfg.input_dim,
+                in_channels=input_dim * hidden_size,
+                out_channels=input_dim,
                 kernel_size=3,
             ),
             nn.Tanh(),
@@ -54,12 +45,18 @@ class Interactor(nn.Sequential):
 
 
 class SCINetBlock(nn.Module):
-    def __init__(self, cfg: SCIBlockCfg) -> None:
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_size: int,
+        kernel_size: int,
+        dropout: float,
+    ) -> None:
         super().__init__()
-        self.rho = Interactor(cfg)
-        self.eta = Interactor(cfg)
-        self.phi = Interactor(cfg)
-        self.psi = Interactor(cfg)
+        self.rho = Interactor(input_dim, hidden_size, kernel_size, dropout)
+        self.eta = Interactor(input_dim, hidden_size, kernel_size, dropout)
+        self.phi = Interactor(input_dim, hidden_size, kernel_size, dropout)
+        self.psi = Interactor(input_dim, hidden_size, kernel_size, dropout)
 
     @staticmethod
     def split(x: Tensor) -> Tuple[Tensor, Tensor]:
@@ -84,14 +81,25 @@ class SCINetBlock(nn.Module):
 
 
 class EncoderTree(nn.Module):
-    def __init__(self, num_levels: int, cfg: SCIBlockCfg) -> None:
+    def __init__(
+        self,
+        num_levels: int,
+        input_dim: int,
+        hidden_size: int,
+        kernel_size: int,
+        dropout: float,
+    ) -> None:
         super().__init__()
         self.current_level = num_levels - 1
-        self.workingblock = SCINetBlock(cfg)
+        self.workingblock = SCINetBlock(input_dim, hidden_size, kernel_size, dropout)
 
         if self.current_level > 0:
-            self.sub_tree_odd = EncoderTree(self.current_level, cfg)
-            self.sub_tree_eve = EncoderTree(self.current_level, cfg)
+            self.sub_tree_odd = EncoderTree(
+                self.current_level, input_dim, hidden_size, kernel_size, dropout
+            )
+            self.sub_tree_eve = EncoderTree(
+                self.current_level, input_dim, hidden_size, kernel_size, dropout
+            )
 
     def zip_up_the_pants(self, even: Tensor, odd: Tensor) -> Tensor:
         # We recursively reordered these sub-series.
@@ -143,7 +151,10 @@ class SCINet(nn.Module):
         output_len: int,
         num_encoder_levels: int,
         hidden_decoder_sizes: Optional[List[int]] = None,
-        block_config: SCIBlockCfg,
+        input_dim: int = 0,
+        hidden_size: int = 1,
+        kernel_size: int = 3,
+        dropout: float = 0.5,
     ):
         super().__init__()
 
@@ -152,7 +163,9 @@ class SCINet(nn.Module):
                 f"Input of len {input_len} cannot be evenly divided in {num_encoder_levels} levels"
             )
 
-        self.encoder = EncoderTree(num_encoder_levels, block_config)
+        self.encoder = EncoderTree(
+            num_encoder_levels, input_dim, hidden_size, kernel_size, dropout
+        )
         self.decoder = Decoder(input_len, output_len, hidden_decoder_sizes)
 
     def forward(self, x: Tensor) -> Tensor:
