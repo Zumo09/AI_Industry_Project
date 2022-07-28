@@ -1,3 +1,4 @@
+import json
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -64,6 +65,17 @@ test_loader = DataLoader(
 )
 print(len(train_loader), len(test_loader))
 
+cfg = dict(
+    output_len=horizon,
+    input_len=horizon,
+    num_encoder_levels=num_encoder_levels,
+    hidden_decoder_sizes=hidden,
+    input_dim=input_dim,
+    hidden_size=hidden_size,
+    kernel_size=kernel_size,
+    dropout=dropout,
+)
+
 model = SCINet(
     output_len=horizon,
     input_len=horizon,
@@ -81,6 +93,10 @@ optim = Adam(model.parameters(), lr=lr)
 lr_sched = CosineAnnealingLR(optim, num_epochs)
 
 with SummaryWriter(log_dir) as writer:
+    with open("config.json", "w") as f:
+        json.dump(cfg, f)
+        print(cfg)
+
     training_loop(
         model=model,
         engine=engine,
