@@ -21,7 +21,7 @@ class Interactor(nn.Sequential):
     def __init__(
         self,
         input_dim: int,
-        hidden_size: int,
+        hidden_size: int,  # hidden_multiplier
         kernel_size: int,
         dropout: float,
     ) -> None:

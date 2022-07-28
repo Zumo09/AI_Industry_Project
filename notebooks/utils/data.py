@@ -34,7 +34,8 @@ class Marconi100Dataset(Dataset):
             data = df.drop(["timestamp", "label", "New_label"], axis=1)
             if scaling is not None:
                 if scaling == "standard":
-                    data = (data - data.mean()) / (data.std() + 1e-5)
+                    data = (data - data.mean(axis=0)) / (data.std(axis=0) + 1e-5)
+                    # data = (data - data.mean()) / (data.std() + 1e-5)
                 elif scaling == "minmax":
                     cols = data.columns
                     data[cols] = MinMaxScaler().fit_transform(data[cols])

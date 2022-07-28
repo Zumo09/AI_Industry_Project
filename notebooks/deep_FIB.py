@@ -26,24 +26,23 @@ print(device)
 
 horizon = 1024
 stride = 512
-n_masks = 100
+n_masks = 1000
 
 batch_size = 32
 
-num_encoder_levels = 2
+num_encoder_levels = 3
 
-log_dir = "./outputs/deep_fib"
-lr = 1e-2
-num_epochs = 20
+log_dir = "./outputs/deep_fib_low_lr"
+lr = 1e-3
+num_epochs = 30
 
-hidden = None
+hidden = [512]
 input_dim = 460
-hidden_size = 4
+hidden_size = 2
 kernel_size = 3
 dropout = 0.5
 
 anomaly_threshold = 0.1  # to be tuned
-
 
 dataset_train = UnfoldedDataset(m_data_train, horizon=horizon, stride=stride)
 dataset_test = UnfoldedDataset(m_data_test, horizon=horizon, stride=stride)
