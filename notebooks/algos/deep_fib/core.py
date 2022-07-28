@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 import random
 
 import torch
@@ -51,7 +51,7 @@ class DeepFIBEngine:
     def __init__(
         self,
         anomaly_threshold: float,
-        masks: Tensor,
+        masks: Optional[Tensor] = None,
         mask_value: int = -1,
     ):
         self.anomaly_threshold = anomaly_threshold
@@ -59,6 +59,8 @@ class DeepFIBEngine:
         self.mask_value = mask_value
 
     def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        assert self.masks is not None, "Masks not initializes. Engine can't train'"
+        model.train()
         inputs = batch["data"]
         batch_size = len(inputs)
         sample_masks = torch.stack(random.choices(self.masks, k=batch_size))
@@ -74,6 +76,7 @@ class DeepFIBEngine:
 
     @torch.no_grad()
     def val_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        model.eval()
         inputs = batch["data"]
         targets = inputs.detach().clone()
         gt_labels = batch["label"]
@@ -90,6 +93,7 @@ class DeepFIBEngine:
 
     @torch.no_grad()
     def test_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        model.eval()
         inputs = batch["data"]
 
         targets = inputs.detach().clone()

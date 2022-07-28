@@ -83,10 +83,10 @@ def training_loop(
                 test_scalars[tag].append(float(val))
 
         if writer is not None:
-            for tag, val in train_scalars.items():
-                writer.add_scalars(tag, {"train_mean": np.mean(val)}, log_step)
+            # for tag, val in train_scalars.items():
+            #     writer.add_scalars(tag, {"train_mean": np.mean(val)}, log_step)
             for tag, val in test_scalars.items():
-                writer.add_scalars(tag, {"test_mean": np.mean(val)}, log_step)
+                writer.add_scalars(tag, {"test": np.mean(val)}, log_step)
 
         train_loss = np.mean(train_scalars["loss"])
         test_loss = np.mean(test_scalars["loss"])
