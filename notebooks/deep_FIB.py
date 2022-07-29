@@ -27,21 +27,21 @@ print(device)
 
 horizon = 1024
 stride = 512
-n_masks = 1000
+n_masks = 100
 
 batch_size = 32
 
 num_encoder_levels = 3
 
-log_dir = "./outputs/deep_fib_even_lower_lr"
-lr = 1e-4
+log_dir = "./outputs/deep_fib_even_less_masks"
+lr = 1e-3
 num_epochs = 30
 
 hidden = [512]
 input_dim = 460
 hidden_size = 2
 kernel_size = 3
-dropout = 0.5
+dropout = 0.05
 
 anomaly_threshold = 0.1  # to be tuned
 

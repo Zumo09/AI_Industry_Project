@@ -1,6 +1,7 @@
 from typing import Dict
 from torch import Tensor
 
+
 def _safe_divide(num: Tensor, denom: Tensor) -> Tensor:
     """prevent zero division."""
     denom[denom == 0.0] = 1
@@ -22,7 +23,14 @@ def compute_metrics(preds: Tensor, target: Tensor) -> Dict[str, Tensor]:
 
     f1 = 2 * _safe_divide(precision * recall, precision + recall)
 
-    return dict(f1=f1, precision=precision, recall=recall)
+    return dict(
+        f1=f1,
+        precision=precision,
+        recall=recall,
+        true_positive=tp,
+        false_positive=fp,
+        false_negative=fn,
+    )
 
 
 def true_positive_rate(preds: Tensor, target: Tensor) -> Tensor:
