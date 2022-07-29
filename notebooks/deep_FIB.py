@@ -33,8 +33,8 @@ batch_size = 32
 
 num_encoder_levels = 3
 
-log_dir = "./outputs/deep_fib_low_lr"
-lr = 1e-3
+log_dir = "./outputs/deep_fib_even_lower_lr"
+lr = 1e-4
 num_epochs = 30
 
 hidden = [512]
@@ -93,7 +93,7 @@ optim = Adam(model.parameters(), lr=lr)
 lr_sched = CosineAnnealingLR(optim, num_epochs)
 
 with SummaryWriter(log_dir) as writer:
-    with open("config.json", "w") as f:
+    with open(f"{log_dir}/config.json", "w") as f:
         json.dump(cfg, f)
         print(cfg)
 
