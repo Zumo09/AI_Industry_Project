@@ -1,0 +1,1 @@
+{"output_len": 1024, "input_len": 1024, "num_encoder_levels": 3, "hidden_decoder_sizes": [512], "input_dim": 460, "hidden_size": 2, "kernel_size": 3, "dropout": 0.5}
