@@ -1,17 +1,13 @@
 from typing import Dict, Optional, Tuple, List
 import os
-from functools import partial
-from multiprocessing import Pool
-
 
 import pandas as pd
-import torch
+import time
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from sklearn.preprocessing import MinMaxScaler
-
-DATASET_PATH = os.path.join(os.getcwd(), "data")
-NUM_FEATURES = 460
+from functools import partial
+from multiprocessing import Pool
 
 
 def get_dataset_paths(dataset_base_path: str) -> List[str]:
@@ -48,7 +44,7 @@ def read(
     )
 
 
-class Marconi100Dataset(Dataset):
+class Marconi100DatasetMulti(Dataset):
     def __init__(self, paths: List[str], scaling: Optional[str] = None) -> None:
         super().__init__()
 
@@ -56,7 +52,7 @@ class Marconi100Dataset(Dataset):
         with Pool() as pool:
             data = pool.imap_unordered(partial(read, scaling=scaling), paths)
 
-            for d in tqdm(data, desc="Loading", total=len(paths)):
+            for d in tqdm(data, desc="Loading Multiprocessing", total=len(paths)):
                 if d is not None:
                     self.data.append(d)
 
@@ -67,47 +63,30 @@ class Marconi100Dataset(Dataset):
         return self.data[index]
 
 
-def unfolded_indexes(
-    dataset: Marconi100Dataset, horizon: int, stride: int
-) -> List[Tuple[int, Tuple[int, int]]]:
-    """Return a list of tuples containing:
-    - the index of the dataframe in the marconi dataset
-    - the starting and ending indexes of the selected window
-
-    The dataframes with length less than horizon will be discarded
-        TODO: padding? (may be a problem maybe for what regard the padding method...
-        maybe a constant paddig might be raised as an anomaly)
-    """
-    indexes = []
-    for idx in range(len(dataset)):
-        df, _ = dataset[idx]
-        length = len(df)
-        if length < horizon:
-            continue
-        start = 0
-        end = start + horizon
-        while end < length:
-            indexes.append((idx, (start, end)))
-            start += stride
-            end = start + horizon
-        # keep last
-        indexes.append((idx, (length - 1 - horizon, length - 1)))
-
-    return indexes
-
-
-class UnfoldedDataset(Dataset):
-    def __init__(self, dataset: Marconi100Dataset, horizon: int, stride: int) -> None:
-        self.dataset = dataset
-        self.indexes = unfolded_indexes(dataset, horizon, stride)
+class Marconi100Dataset(Dataset):
+    def __init__(self, paths: List[str], scaling: Optional[str] = None) -> None:
+        super().__init__()
+        self.data = []
+        for path in tqdm(paths, desc="Loading Single Process", total=len(paths)):
+            d = read(path, scaling)
+            if d is not None:
+                self.data.append(d)
 
     def __len__(self) -> int:
-        return len(self.indexes)
+        return len(self.data)
 
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        df_idx, (start, end) = self.indexes[index]
-        data, label = self.dataset[df_idx]
-        data_t = torch.tensor(data.to_numpy())[start:end].float()
-        label_t = torch.tensor(label.to_numpy())[start:end].int()
+    def __getitem__(self, index: int) -> Tuple[pd.DataFrame, pd.Series]:
+        return self.data[index]
 
-        return {"data": data_t, "label": label_t}
+
+if __name__ == "__main__":
+    paths = get_dataset_paths("data")
+
+    t1 = time.time()
+    d1 = Marconi100Dataset(paths, "minmax")
+    print(time.time() - t1)
+    del d1
+
+    t2 = time.time()
+    d2 = Marconi100DatasetMulti(paths, "minmax")
+    print(time.time() - t2)
