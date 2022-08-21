@@ -1,9 +1,15 @@
-from turtle import forward
 import torch
 from torch import Tensor
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Mapping, Type, Callable, Union, List, Optional
+
+
+RESNET50_LAYERS = [3, 4, 6, 3]
+
+LAYER_1 = "layer1"
+LAYER_2 = "layer2"
+LAYER_3 = "layer3"
+LAYER_4 = "layer4"
 
 
 def conv3x3(
@@ -19,12 +25,19 @@ def conv3x3(
         groups=groups,
         bias=False,
         dilation=dilation,
+        padding_mode="reflect",
     )
 
 
 def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv1d:
     """1x1 convolution"""
-    return nn.Conv1d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+    return nn.Conv1d(
+        in_planes,
+        out_planes,
+        kernel_size=1,
+        stride=stride,
+        bias=False,
+    )
 
 
 class BasicBlock(nn.Module):
@@ -134,13 +147,13 @@ class Bottleneck(nn.Module):
         return out
 
 
-class _ResNetFeatures(nn.Module):
+class ResNetFeatures(nn.Module):
     def __init__(
         self,
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
         num_features: int,
-        return_layers: List[str],
+        return_layers: Optional[List[str]] = None,
         zero_init_residual: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
@@ -152,7 +165,10 @@ class _ResNetFeatures(nn.Module):
             norm_layer = nn.BatchNorm1d
         self._norm_layer = norm_layer
 
-        self.return_layers = return_layers
+        if not return_layers:
+            self.nodes = [LAYER_4]
+        else:
+            self.nodes = return_layers
 
         self.inplanes = 64
         self.dilation = 1
@@ -197,7 +213,8 @@ class _ResNetFeatures(nn.Module):
                 )
             )
         self.layers = nn.ModuleList(_layers)
-        self.out_planes = planes
+        self.out_planes = planes * block.expansion
+        self.dilated = replace_stride_with_dilation
 
         for m in self.modules():
             if isinstance(m, nn.Conv1d):
@@ -274,7 +291,7 @@ class _ResNetFeatures(nn.Module):
         returns = {}
         for i, layer in enumerate(self.layers, start=1):
             x = layer(x)
-            if f"layer{i}" in self.return_layers:
+            if f"layer{i}" in self.nodes:
                 returns[f"layer{i}"] = x
 
         return returns
@@ -283,72 +300,20 @@ class _ResNetFeatures(nn.Module):
 class ResNet(nn.Module):
     def __init__(
         self,
-        block: Type[Union[BasicBlock, Bottleneck]],
-        layers: List[int],
-        num_features: int,
+        backbone: ResNetFeatures,
         num_classes: int = 1000,
-        zero_init_residual: bool = False,
-        groups: int = 1,
-        width_per_group: int = 64,
-        replace_stride_with_dilation: Optional[List[bool]] = None,
-        norm_layer: Optional[Callable[..., nn.Module]] = None,
     ) -> None:
         super().__init__()
-        assert len(layers) == 4
-        self.features = _ResNetFeatures(
-            block,
-            layers,
-            num_features,
-            ["layer4"],
-            zero_init_residual,
-            groups,
-            width_per_group,
-            replace_stride_with_dilation,
-            norm_layer,
-        )
+        self.features = backbone
+        self.node = f"layer{len(backbone.layers)}"
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.fc = nn.Linear(self.features.out_planes * block.expansion, num_classes)
+        self.fc = nn.Linear(self.features.out_planes, num_classes)
 
     def forward(self, x: Tensor) -> Tensor:
         x = x.permute(0, 2, 1)
-        x = self.features(x)["layer4"]
+        x = self.features(x)[self.node]
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
 
         return x
-
-
-class ResNetU(nn.Module):
-    def __init__(
-        self,
-        block: Type[Union[BasicBlock, Bottleneck]],
-        layers: List[int],
-        num_features: int,
-        zero_init_residual: bool = False,
-        groups: int = 1,
-        width_per_group: int = 64,
-        replace_stride_with_dilation: Optional[List[bool]] = None,
-        norm_layer: Optional[Callable[..., nn.Module]] = None,
-    ) -> None:
-        super().__init__()
-        assert len(layers) == 3
-        self.features = _ResNetFeatures(
-            block,
-            layers,
-            num_features,
-            ["layer1", "layer3"],
-            zero_init_residual,
-            groups,
-            width_per_group,
-            replace_stride_with_dilation,
-            norm_layer,
-        )
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = x.permute(0, 2, 1)
-        feats = self.features(x)
-
-        ret = F.interpolate(feats["layer3"], scale_factor=8, mode="linear")
-
-        return ret
