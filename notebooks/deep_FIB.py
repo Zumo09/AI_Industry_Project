@@ -7,20 +7,21 @@ from torch.utils.tensorboard.writer import SummaryWriter
 
 from sklearn.model_selection import train_test_split
 
-from utils.data import get_dataset_paths
-from utils.data import Marconi100Dataset
-from utils.data import UnfoldedDataset
-from utils.training import training_loop
+from common.data import get_dataset_paths
+from common.data import Marconi100Dataset
+from common.data import UnfoldedDataset
+from common.data import Scaling
+from common.training import training_loop
 
 from algos.deep_fib.core import get_masks
 from algos.deep_fib.core import DeepFIBEngine
-from algos.deep_fib.sci_net import SCINet
+from common.models.sci_net import SCINet
 
 paths = get_dataset_paths("../data")
 train, test = train_test_split(paths, test_size=0.1, random_state=42)
 
-m_data_train = Marconi100Dataset(train, scaling="minmax")
-m_data_test = Marconi100Dataset(test, scaling="minmax")
+m_data_train = Marconi100Dataset(train, scaling=Scaling.MINMAX)
+m_data_test = Marconi100Dataset(test, scaling=Scaling.MINMAX)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)

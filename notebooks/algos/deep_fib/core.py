@@ -8,8 +8,8 @@ from torch.nn import Module
 
 import numpy as np
 
-from utils.data import NUM_FEATURES
-from utils.metrics import compute_metrics
+from common.data import NUM_FEATURES
+from common.metrics import compute_metrics
 
 
 def get_masks(horizon: int, n: int) -> torch.Tensor:

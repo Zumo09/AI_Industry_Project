@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Dict, Optional, Tuple, List
 import os
 from functools import partial
@@ -14,6 +15,12 @@ DATASET_PATH = os.path.join(os.getcwd(), "data")
 NUM_FEATURES = 460
 
 
+class Scaling(Enum):
+    STANDARD = "Standard"
+    MINMAX = "MinMax"
+    NONE = "None"
+
+
 def get_dataset_paths(dataset_base_path: str) -> List[str]:
     paths = []  # type: List[str]
     for name in os.listdir(dataset_base_path):
@@ -24,7 +31,7 @@ def get_dataset_paths(dataset_base_path: str) -> List[str]:
 
 
 def read(
-    path: str, scaling: Optional[str] = None
+    path: str, scaling: Scaling = Scaling.NONE
 ) -> Optional[Tuple[pd.DataFrame, pd.Series]]:
     df = pd.read_parquet(path, engine="pyarrow")
     if len(df.index) == 0:
@@ -33,15 +40,12 @@ def read(
     label = df["New_label"].astype(int)
     label = label.replace(2, 1)  # labels were [0, 2], we want [0, 1]
     data = df.drop(["timestamp", "label", "New_label"], axis=1)
-    if scaling is not None:
-        if scaling == "standard":
-            data = (data - data.mean(axis=0)) / (data.std(axis=0) + 1e-5)
-            # data = (data - data.mean()) / (data.std() + 1e-5)
-        elif scaling == "minmax":
-            cols = data.columns
-            data[cols] = MinMaxScaler().fit_transform(data[cols])
-        else:
-            raise ValueError(f"Scaling method '{scaling}' not in (standard, minmax)")
+    if scaling == Scaling.STANDARD:
+        data = (data - data.mean(axis=0)) / (data.std(axis=0) + 1e-5)
+        # data = (data - data.mean()) / (data.std() + 1e-5)
+    elif scaling == Scaling.MINMAX:
+        cols = data.columns
+        data[cols] = MinMaxScaler().fit_transform(data[cols])
     return (
         pd.DataFrame(data.values, index=timestamps, columns=data.columns),
         pd.Series(label.values, index=timestamps),
@@ -49,7 +53,7 @@ def read(
 
 
 class Marconi100Dataset(Dataset):
-    def __init__(self, paths: List[str], scaling: Optional[str] = None) -> None:
+    def __init__(self, paths: List[str], scaling: Scaling = Scaling.NONE) -> None:
         super().__init__()
 
         self.data = []
