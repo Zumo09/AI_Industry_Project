@@ -106,11 +106,11 @@ class DeepLabHeadV3Plus(nn.Module):
         self.out_name = out_name
 
     def forward(self, features):
-        # print("low", features[self.low_level_name].size())
-        # print("high", features[self.out_name].size())
         low_level_feature = self.project(features[self.low_level_name])
+        # print("low", features[self.low_level_name].size())
         # print("prj", low_level_feature.size())
         output_feature = self.aspp(features[self.out_name])
+        # print("high", features[self.out_name].size())
         # print("feat", output_feature.size())
         output_feature = F.interpolate(
             output_feature,
@@ -118,9 +118,11 @@ class DeepLabHeadV3Plus(nn.Module):
             mode="linear",
             align_corners=False,
         )
-        # print("feat", output_feature.size())
-        outs = self.classifier(torch.cat([low_level_feature, output_feature], dim=1))
-        # print("outs", output_feature.size())
+        # print("up1", output_feature.size())
+        cat = torch.cat([low_level_feature, output_feature], dim=1)
+        # print("cat", cat.size())
+        outs = self.classifier(cat)
+        # print("outs", outs.size())
         return outs
 
 
@@ -150,4 +152,5 @@ class DeepLabNet(nn.Module):
         out: torch.Tensor = self.head(features)
         out = F.interpolate(out, size=input_shape, mode="linear")
 
+        out = torch.sigmoid(out)
         return out.permute(0, 2, 1)
