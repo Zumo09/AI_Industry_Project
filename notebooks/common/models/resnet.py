@@ -197,7 +197,7 @@ class ResNetFeatures(nn.Module):
         )
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+        # self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
         planes = 64
         _layers = [self._make_layer(block, planes, layers[0])]
@@ -286,7 +286,7 @@ class ResNetFeatures(nn.Module):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x = self.maxpool(x)
+        # x = self.maxpool(x)
 
         returns = {}
         for i, layer in enumerate(self.layers, start=1):
