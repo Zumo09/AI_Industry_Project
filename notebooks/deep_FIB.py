@@ -10,10 +10,12 @@ from sklearn.model_selection import train_test_split
 from common import data
 from common.training import training_loop
 
-from algos.deep_fib import get_masks
-from algos.deep_fib import DeepFIBEngine
+from algos import deep_fib
 
-from common.models import resnet, deeplab, sci_net
+from common.models import resnet, deeplab, scinet
+
+SCINET = "scinet"
+DEEPLAB = "deeplab"
 
 paths = data.get_dataset_paths("../data")
 train, test = train_test_split(paths, test_size=0.1, random_state=42)
@@ -24,7 +26,7 @@ m_data_test = data.Marconi100Dataset(test, scaling=data.Scaling.MINMAX)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
 
-model = "deeplab"
+model_name = DEEPLAB
 horizon = 1024
 stride = 512
 n_masks = 50
@@ -40,7 +42,7 @@ anomaly_threshold = 0.1  # to be tuned
 dataset_train = data.UnfoldedDataset(m_data_train, horizon=horizon, stride=stride)
 dataset_test = data.UnfoldedDataset(m_data_test, horizon=horizon, stride=stride)
 
-masks = get_masks(horizon, n_masks).float()
+masks = deep_fib.get_masks(horizon, n_masks).float()
 
 print(len(dataset_train), len(dataset_test), masks.size())
 
@@ -57,7 +59,7 @@ test_loader = DataLoader(
 )
 print(len(train_loader), len(test_loader))
 
-if model == "scinet":
+if model_name == SCINET:
     num_encoder_levels = 3
     hidden = [512]
     input_dim = 460
@@ -65,7 +67,7 @@ if model == "scinet":
     kernel_size = 3
     dropout = 0.5
 
-    model = sci_net.SCINet(
+    model = scinet.SCINet(
         output_len=horizon,
         input_len=horizon,
         num_encoder_levels=num_encoder_levels,
@@ -89,7 +91,7 @@ if model == "scinet":
             ),
             f,
         )
-elif model == "deeplab":
+elif model_name == DEEPLAB:
     model = deeplab.DeepLabNet(
         resnet.ResNetFeatures(
             resnet.Bottleneck,
@@ -100,10 +102,12 @@ elif model == "deeplab":
         ),
         backbone_channels=[256, 2048],
         out_feats=data.NUM_FEATURES,
-    )
+    ).float()
+else:
+    raise ValueError("Wrong model name")
 
 
-engine = DeepFIBEngine(anomaly_threshold, masks)
+engine = deep_fib.DeepFIBEngine(anomaly_threshold, masks)
 optim = Adam(model.parameters(), lr=lr)
 lr_sched = CosineAnnealingLR(optim, num_epochs)
 
