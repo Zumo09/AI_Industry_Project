@@ -8,7 +8,7 @@ from .resnet import ResNetFeatures
 
 class ASPPConv(nn.Sequential):
     def __init__(self, in_channels: int, out_channels: int, dilation: int) -> None:
-        modules = [
+        super().__init__(
             nn.Conv1d(
                 in_channels,
                 out_channels,
@@ -19,8 +19,7 @@ class ASPPConv(nn.Sequential):
             ),
             nn.BatchNorm1d(out_channels),
             nn.ReLU(),
-        ]
-        super().__init__(*modules)
+        )
 
 
 class ASPPPooling(nn.Sequential):
@@ -36,7 +35,7 @@ class ASPPPooling(nn.Sequential):
         size = x.shape[2:]
         for mod in self:
             x = mod(x)
-        return F.interpolate(x, size=size, mode="linear", align_corners=False)
+        return F.interpolate(x, size=size, mode="linear")
 
 
 class ASPP(nn.Module):
@@ -71,8 +70,8 @@ class ASPP(nn.Module):
         _res = []
         for conv in self.convs:
             _res.append(conv(x))
+
         res = torch.cat(_res, dim=1)
-        print("res", res.size())
         return self.project(res)
 
 
@@ -107,21 +106,21 @@ class DeepLabHeadV3Plus(nn.Module):
         self.out_name = out_name
 
     def forward(self, features):
-        print("low", features[self.low_level_name].size())
-        print("high", features[self.out_name].size())
+        # print("low", features[self.low_level_name].size())
+        # print("high", features[self.out_name].size())
         low_level_feature = self.project(features[self.low_level_name])
-        print("prj", low_level_feature.size())
+        # print("prj", low_level_feature.size())
         output_feature = self.aspp(features[self.out_name])
-        print("feat", output_feature.size())
+        # print("feat", output_feature.size())
         output_feature = F.interpolate(
             output_feature,
             size=low_level_feature.shape[2:],
             mode="linear",
             align_corners=False,
         )
-        print("feat", output_feature.size())
+        # print("feat", output_feature.size())
         outs = self.classifier(torch.cat([low_level_feature, output_feature], dim=1))
-        print("outs", output_feature.size())
+        # print("outs", output_feature.size())
         return outs
 
 
@@ -148,7 +147,7 @@ class DeepLabNet(nn.Module):
 
         features = self.backbone(x)
 
-        out = self.head(features)
-        out = F.interpolate(out, size=input_shape, mode="linear", align_corners=False)
+        out: torch.Tensor = self.head(features)
+        out = F.interpolate(out, size=input_shape, mode="linear")
 
         return out.permute(0, 2, 1)

@@ -178,7 +178,7 @@ class ResNetFeatures(nn.Module):
             replace_stride_with_dilation = [False] * (len(layers) - 1)
         if len(layers) > 4:
             raise ValueError("layers should be 4 or less")
-        if len(replace_stride_with_dilation) != len(layers) - 1:
+        if len(replace_stride_with_dilation) != (len(layers) - 1):
             raise ValueError(
                 "replace_stride_with_dilation should be None "
                 "or a {}-element tuple, got {}".format(
