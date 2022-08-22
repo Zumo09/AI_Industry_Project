@@ -1,97 +1,126 @@
+import json
 import torch
 from torch.optim import Adam
-from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.utils.tensorboard.writer import SummaryWriter
+
 from sklearn.model_selection import train_test_split
 
-from deep_fib.sci_net import SCIBlockCfg, SCINet
-from deep_fib.data import DeepFIBDataset, get_masks
-from deep_fib.core import DeepFIBEngine
+from common import data
+from common.training import training_loop
 
-from utils.data import Marconi100Dataset, get_dataset_paths
-from utils.training import training_loop
+from algos import deep_fib
 
-paths = get_dataset_paths("data")
+from common.models import resnet, deeplab, scinet
+
+SCINET = "scinet"
+DEEPLAB = "deeplab"
+
+paths = data.get_dataset_paths("../data")
 train, test = train_test_split(paths, test_size=0.1, random_state=42)
 
-# train = train[:len(train)//30]
-# test = test[:len(test)//10]
-# len(train), len(test)
-
-m_data_train = Marconi100Dataset(train, normalize="normal")
-m_data_test = Marconi100Dataset(test, normalize="normal")
+m_data_train = data.Marconi100Dataset(train, scaling=data.Scaling.MINMAX)
+m_data_test = data.Marconi100Dataset(test, scaling=data.Scaling.MINMAX)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
 
+model_name = DEEPLAB
 horizon = 1024
-stride = 1000
-n_masks = 100
+stride = 512
+n_masks = 50
 
 batch_size = 32
-num_workers = 0
 
-num_encoder_levels = 2
-
-log_dir = "./trash"
+log_dir = "./outputs/deep_fib_deeplab_sigmoid"
 lr = 1e-3
-num_epochs = 3
-step_size = 2
+num_epochs = 30
 
-hidden = None
-block_cfg = SCIBlockCfg(input_dim=460, hidden_size=4, kernel_size=3, dropout=0.5,)
+anomaly_threshold = 0.1  # to be tuned
 
-anomaly_threshold = 0.7
+dataset_train = data.UnfoldedDataset(m_data_train, horizon=horizon, stride=stride)
+dataset_test = data.UnfoldedDataset(m_data_test, horizon=horizon, stride=stride)
 
-dataset_train = DeepFIBDataset(m_data_train, horizon=horizon, stride=stride)
-dataset_test = DeepFIBDataset(m_data_test, horizon=horizon, stride=stride)
-masks = get_masks(horizon, n_masks).float()
+masks = deep_fib.get_masks(horizon, n_masks).float()
 
-print("Datasets")
-print("Train: ", len(dataset_train))
-print("Test : ", len(dataset_test))
-print("Masks: ", len(masks))
+print(len(dataset_train), len(dataset_test), masks.size())
 
 
 train_loader = DataLoader(
     dataset_train,
     batch_size,
     shuffle=True,
-    num_workers=num_workers,
-    # persistent_workers=(num_workers != 0),
 )
 test_loader = DataLoader(
     dataset_test,
     batch_size,
     shuffle=False,
-    num_workers=num_workers,
-    # persistent_workers=(num_workers != 0),
 )
+print(len(train_loader), len(test_loader))
 
-print("Dataloaders")
-print("Train: ", len(train_loader))
-print("Test : ", len(test_loader))
+if model_name == SCINET:
+    num_encoder_levels = 3
+    hidden = [512]
+    input_dim = 460
+    hidden_size = 2
+    kernel_size = 3
+    dropout = 0.5
 
-model = SCINet(
-    output_len=horizon,
-    input_len=horizon,
-    num_encoder_levels=num_encoder_levels,
-    hidden_decoder_sizes=hidden,
-    block_config=block_cfg,
-).float()
+    model = scinet.SCINet(
+        output_len=horizon,
+        input_len=horizon,
+        num_encoder_levels=num_encoder_levels,
+        hidden_decoder_sizes=hidden,
+        input_dim=input_dim,
+        hidden_size=hidden_size,
+        kernel_size=kernel_size,
+        dropout=dropout,
+    ).float()
+    with open(f"{log_dir}/config.json", "w") as f:
+        json.dump(
+            dict(
+                output_len=horizon,
+                input_len=horizon,
+                num_encoder_levels=num_encoder_levels,
+                hidden_decoder_sizes=hidden,
+                input_dim=input_dim,
+                hidden_size=hidden_size,
+                kernel_size=kernel_size,
+                dropout=dropout,
+            ),
+            f,
+        )
+elif model_name == DEEPLAB:
+    model = deeplab.DeepLabNet(
+        resnet.ResNetFeatures(
+            resnet.Bottleneck,
+            resnet.RESNET50_LAYERS,
+            return_layers=[resnet.LAYER_1, resnet.LAYER_4],
+            replace_stride_with_dilation=[False, True, True],
+            num_features=data.NUM_FEATURES,
+        ),
+        backbone_channels=[256, 2048],
+        out_feats=data.NUM_FEATURES,
+    ).float()
+else:
+    raise ValueError("Wrong model name")
 
-engine = DeepFIBEngine(anomaly_threshold, masks)
 
+engine = deep_fib.DeepFIBEngine(anomaly_threshold, masks)
 optim = Adam(model.parameters(), lr=lr)
-lr_sched = StepLR(optim, step_size)
+lr_sched = CosineAnnealingLR(optim, num_epochs)
 
-training_loop(
-    model=model,
-    engine=engine,
-    num_epochs=num_epochs,
-    train_dataloader=train_loader,
-    test_dataloader=test_loader,
-    device=device,
-    optimizer=optim,
-    lr_scheduler=lr_sched,
-)
+with SummaryWriter(log_dir) as writer:
+    training_loop(
+        model=model,
+        engine=engine,
+        num_epochs=num_epochs,
+        train_dataloader=train_loader,
+        test_dataloader=test_loader,
+        device=device,
+        optimizer=optim,
+        lr_scheduler=lr_sched,
+        writer=writer,
+        save_path=log_dir + "/models",
+    )
