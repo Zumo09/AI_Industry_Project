@@ -9,22 +9,22 @@ from torch.nn import Module
 import numpy as np
 
 from common.data import NUM_FEATURES
-from common.metrics import compute_metrics
+from common import metrics
 
 
-def get_masks(horizon: int, n: int) -> torch.Tensor:
+def get_masks(horizon: int, n_masks: int) -> torch.Tensor:
     """Pointwise non overlapping Masking"""
     shape = (horizon, NUM_FEATURES)
     masks = []
     prod = np.prod(shape)
-    n_mask = int(prod / n)
+    n_mask_point = int(prod / n_masks)
     # set are much more efficient at removing
     not_used = set(i for i in range(prod))
 
-    while len(masks) < n:
+    while len(masks) < n_masks:
         mask = np.ones(prod)
         # choose from the aviable indices
-        idxs = np.random.choice(tuple(not_used), n_mask, replace=False)
+        idxs = np.random.choice(tuple(not_used), n_mask_point, replace=False)
         # set to 0
         mask[idxs] = 0
         # mark as used
@@ -36,11 +36,15 @@ def get_masks(horizon: int, n: int) -> torch.Tensor:
     return torch.stack(masks)
 
 
-def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
-    # num_cols = targets.size(-1)
-    # return torch.linalg.norm(preds - targets, ord=1, dim=-1) / num_cols
-    return F.mse_loss(preds, targets, reduction="mean")
-    # return F.l1_loss(preds, targets, reduction="mean")
+def reconstruction_error(
+    preds: Tensor, targets: Tensor, loss_type: str = "l1"
+) -> Tensor:
+    if loss_type == "mse":
+        return F.mse_loss(preds, targets, reduction="mean")
+    elif loss_type == "l1":
+        return F.l1_loss(preds, targets, reduction="mean")
+    else:
+        raise ValueError(f"{loss_type} not in [mse, l1]")
 
 
 def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
@@ -54,10 +58,12 @@ class DeepFIBEngine:
         anomaly_threshold: float,
         masks: Optional[Tensor] = None,
         mask_value: int = -1,
+        loss_type: str = "l1",
     ):
         self.anomaly_threshold = anomaly_threshold
         self.masks = masks
         self.mask_value = mask_value
+        self.loss_type = loss_type
 
     def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         assert self.masks is not None, "Masks not initializes. Engine can't train'"
@@ -71,7 +77,7 @@ class DeepFIBEngine:
 
         preds = model(inputs)
 
-        loss = reconstruction_error(preds, targets)
+        loss = reconstruction_error(preds, targets, self.loss_type)
 
         return dict(loss=loss)
 
@@ -87,10 +93,10 @@ class DeepFIBEngine:
         errors = residual_error(preds, targets)
         # mre = errors.mean() mre == loss!!!
         labels = (errors > self.anomaly_threshold).to(torch.int)
-        loss = reconstruction_error(preds, targets)
-        metrics = compute_metrics(labels.flatten(), gt_labels.flatten())
-        metrics.update(dict(loss=loss))
-        return metrics
+        loss = reconstruction_error(preds, targets, self.loss_type)
+        met = metrics.compute_metrics(labels.flatten(), gt_labels.flatten())
+        met.update(dict(loss=loss))
+        return met
 
     @torch.no_grad()
     def test_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:

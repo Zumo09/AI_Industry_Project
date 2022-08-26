@@ -117,21 +117,21 @@ def plot_precision_recall_curve(
     axes: Tuple[Tuple[plt.Axes, ...], ...]
     _, axes = plt.subplots(2, 2, figsize=figsize)  # type: ignore
     f1 = 2 * precision * recall / (precision + recall + 1e-9)
-    ((pr_ax, rc_ax), (f1_ax, pr_ax)) = axes
-    pr_ax.set_title("Precision")
-    pr_ax.plot(thresholds, precision)
-    pr_ax.set_xlabel("thresholds")
+    ((prec_ax, rec_ax), (f1_ax, prc_ax)) = axes
+    prec_ax.set_title("Precision")
+    prec_ax.plot(thresholds, precision)
+    prec_ax.set_xlabel("thresholds")
 
-    rc_ax.set_title("Recall")
-    rc_ax.plot(thresholds, recall)
-    rc_ax.set_xlabel("thresholds")
+    rec_ax.set_title("Recall")
+    rec_ax.plot(thresholds, recall)
+    rec_ax.set_xlabel("thresholds")
 
     f1_ax.set_title("F1")
     f1_ax.plot(thresholds, f1)
     f1_ax.set_xlabel("thresholds")
 
-    pr_ax.set_title("Precision - Recall")
-    pr_ax.plot(precision, recall)
-    pr_ax.set_xlabel("precision")
-    pr_ax.set_xlabel("recall")
+    prc_ax.set_title("Precision - Recall")
+    prc_ax.plot(precision, recall)
+    prc_ax.set_xlabel("precision")
+    prc_ax.set_xlabel("recall")
     plt.show()
