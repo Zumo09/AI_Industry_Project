@@ -60,7 +60,6 @@ class DeepFIBEngine:
     def __init__(
         self,
         model: Module,
-        anomaly_threshold: float,
         device: Optional[torch.device] = None,
         masks: Optional[Tensor] = None,
         mask_value: int = -1,
@@ -70,7 +69,7 @@ class DeepFIBEngine:
     ):
         self.device = device or torch.device("cpu")
         self.model = model.to(self.device)
-        # self.anomaly_threshold = anomaly_threshold
+
         self.masks = masks
         self.mask_value = mask_value
         self.loss_type = loss_type
@@ -123,18 +122,17 @@ class DeepFIBEngine:
         errors = residual_error(preds, targets)
         loss = reconstruction_error(preds, targets, self.loss_type)
 
-        auc = metrics.average_precision_score(gt_labels.flatten(), errors.flatten())
+        auc = metrics.average_precision_score(gt_labels, errors)
         return dict(loss=loss.item(), auc=auc)
 
-    # @torch.no_grad()
-    # def predict(self, inputs: Tensor) -> Dict[str, Tensor]:
-    #     inputs = inputs.to(self.device)
-    #     targets = inputs.detach().clone()
+    @torch.no_grad()
+    def predict(self, inputs: Tensor) -> Tensor:
+        inputs = inputs.to(self.device)
+        targets = inputs.detach().clone()
 
-    #     self.model.eval()
-    #     preds = self.model(inputs)
+        self.model.eval()
+        preds = self.model(inputs)
 
-    #     errors = residual_error(preds, targets)
-    #     labels = (errors.detach() > self.anomaly_threshold).to(torch.int)
+        errors = residual_error(preds, targets)
 
-    #     return dict(errors=errors, labels=labels)
+        return errors

@@ -3,9 +3,7 @@ from torch import Tensor
 import numpy as np
 import torch
 
-from sklearn.metrics import auc
-from sklearn.metrics import precision_recall_curve
-from sklearn.metrics import average_precision_score
+from sklearn import metrics as _skm
 import matplotlib.pyplot as plt
 
 
@@ -44,6 +42,20 @@ def true_positive_rate(preds: Tensor, target: Tensor) -> float:
     return compute_metrics(preds, target)["recall"]
 
 
+def average_precision_score(labels: Tensor, errors: Tensor) -> float:
+    return _skm.average_precision_score(
+        labels.cpu().flatten(), errors.cpu().flatten(), pos_label=0
+    )
+
+
+def precision_recall_curve(
+    labels: Tensor, errors: Tensor
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    return _skm.precision_recall_curve(
+        labels.cpu().flatten(), errors.cpu().flatten(), pos_label=0
+    )
+
+
 def evaluate_thresholds(
     all_errors: Tensor, all_labels: Tensor
 ) -> Dict[str, List[float]]:
@@ -64,7 +76,7 @@ def evaluate_thresholds(
         fp.append(metrics["false_positive"])
         fn.append(metrics["false_negative"])
 
-    auc_pr = average_precision_score(all_labels.flatten(), all_errors.flatten())
+    auc_pr = average_precision_score(all_labels, all_errors)
 
     return dict(
         thresholds=list(thresholds),
@@ -74,7 +86,7 @@ def evaluate_thresholds(
         true_positive=tp,
         false_positive=fp,
         false_negative=fn,
-        auc=auc_pr,
+        auc=[auc_pr],
     )
 
 
@@ -113,10 +125,8 @@ def plot_threshold_metrics(
 def plot_precision_recall_curve(
     errors: Tensor, labels: Tensor, figsize: Tuple[int, int] = (10, 10)
 ) -> None:
-    precision, recall, thresholds = precision_recall_curve(
-        labels.flatten(), errors.flatten()
-    )
-    auc_pr = auc(recall, precision)
+    precision, recall, thresholds = precision_recall_curve(labels, errors)
+    auc_pr = _skm.auc(recall, precision)
     recall = recall[:-1]
     precision = precision[:-1]
     axes: Tuple[Tuple[plt.Axes, ...], ...]
@@ -136,7 +146,7 @@ def plot_precision_recall_curve(
     f1_ax.set_xlabel("thresholds")
 
     prc_ax.set_title(f"Precision - Recall (AUC={auc_pr:.3f})")
-    prc_ax.plot(precision, recall)
-    prc_ax.set_xlabel("precision")
+    prc_ax.plot(recall, precision)
+    prc_ax.set_ylabel("precision")
     prc_ax.set_xlabel("recall")
     plt.show()
