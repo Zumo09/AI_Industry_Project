@@ -39,7 +39,8 @@ def get_masks(horizon: int, n: int) -> torch.Tensor:
 def reconstruction_error(preds: Tensor, targets: Tensor) -> Tensor:
     # num_cols = targets.size(-1)
     # return torch.linalg.norm(preds - targets, ord=1, dim=-1) / num_cols
-    return F.l1_loss(preds, targets, reduction="mean")
+    return F.mse_loss(preds, targets, reduction="mean")
+    # return F.l1_loss(preds, targets, reduction="mean")
 
 
 def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
