@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Protocol
+from typing import Dict, List, Optional, Protocol
 from collections import defaultdict
 import os
 
@@ -38,6 +38,7 @@ def training_loop(
     test_dataloader: DataLoader,
     writer: Optional[Writer] = None,
     save_path: Optional[str] = None,
+    print_metrics: List[str] = [],
 ) -> None:
     if save_path is not None:
         if not os.path.isdir(save_path):
@@ -50,7 +51,7 @@ def training_loop(
         for batch in tqdm(train_dataloader, leave=False, desc=f"Train {epoch}"):
             rets = engine.train_step(batch)
 
-            if _train_loss == np.nan:
+            if np.isnan(_train_loss):
                 _train_loss = rets["loss"]
             else:
                 _train_loss *= _smoothing
@@ -75,6 +76,8 @@ def training_loop(
         test_loss = np.mean(test_scalars["loss"])
         log_str = f"Epoch {epoch} - train_loss = {_train_loss:.3f} - test_loss = {test_loss:.3f}"
 
+        for key in print_metrics:
+            log_str += f" - test_{key}={np.mean(test_scalars[key]):.3f}"
         log_str += engine.end_epoch(epoch, save_path)
 
         print(log_str)

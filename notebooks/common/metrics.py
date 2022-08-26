@@ -1,10 +1,11 @@
-import re
 from typing import Dict, List, Tuple
 from torch import Tensor
 import numpy as np
 import torch
 
+from sklearn.metrics import auc
 from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import average_precision_score
 import matplotlib.pyplot as plt
 
 
@@ -63,6 +64,8 @@ def evaluate_thresholds(
         fp.append(metrics["false_positive"])
         fn.append(metrics["false_negative"])
 
+    auc_pr = average_precision_score(all_labels.flatten(), all_errors.flatten())
+
     return dict(
         thresholds=list(thresholds),
         f1=f1,
@@ -71,6 +74,7 @@ def evaluate_thresholds(
         true_positive=tp,
         false_positive=fp,
         false_negative=fn,
+        auc=auc_pr,
     )
 
 
@@ -99,7 +103,7 @@ def plot_threshold_metrics(
     axes[1][1].plot(metrics["thresholds"], metrics["false_positive"])
     axes[1][1].set_xlabel("thresholds")
 
-    axes[1][2].set_title("Precision - Recall")
+    axes[1][2].set_title(f"Precision - Recall (AUC={metrics['auc']})")
     axes[1][2].plot(metrics["precision"], metrics["recall"])
     axes[1][2].set_xlabel("precision")
     axes[1][2].set_xlabel("recall")
@@ -112,6 +116,7 @@ def plot_precision_recall_curve(
     precision, recall, thresholds = precision_recall_curve(
         labels.flatten(), errors.flatten()
     )
+    auc_pr = auc(recall, precision)
     recall = recall[:-1]
     precision = precision[:-1]
     axes: Tuple[Tuple[plt.Axes, ...], ...]
@@ -130,7 +135,7 @@ def plot_precision_recall_curve(
     f1_ax.plot(thresholds, f1)
     f1_ax.set_xlabel("thresholds")
 
-    prc_ax.set_title("Precision - Recall")
+    prc_ax.set_title(f"Precision - Recall (AUC={auc_pr:.3f})")
     prc_ax.plot(precision, recall)
     prc_ax.set_xlabel("precision")
     prc_ax.set_xlabel("recall")

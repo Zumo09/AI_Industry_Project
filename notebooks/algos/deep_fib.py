@@ -11,8 +11,8 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 import numpy as np
 
-from common.data import NUM_FEATURES
 from common import metrics
+from common.data import NUM_FEATURES
 from common.models.modutils import save_model
 
 
@@ -70,7 +70,7 @@ class DeepFIBEngine:
     ):
         self.device = device or torch.device("cpu")
         self.model = model.to(self.device)
-        self.anomaly_threshold = anomaly_threshold
+        # self.anomaly_threshold = anomaly_threshold
         self.masks = masks
         self.mask_value = mask_value
         self.loss_type = loss_type
@@ -123,10 +123,8 @@ class DeepFIBEngine:
         errors = residual_error(preds, targets)
         loss = reconstruction_error(preds, targets, self.loss_type)
 
-        labels = (errors > self.anomaly_threshold).to(torch.int)
-        met = metrics.compute_metrics(labels.flatten(), gt_labels.flatten())
-        met.update(dict(loss=loss.item()))
-        return met
+        auc = metrics.average_precision_score(gt_labels.flatten(), errors.flatten())
+        return dict(loss=loss.item(), auc=auc)
 
     # @torch.no_grad()
     # def predict(self, inputs: Tensor) -> Dict[str, Tensor]:
