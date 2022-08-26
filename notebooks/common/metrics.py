@@ -14,7 +14,7 @@ def _safe_divide(num: Tensor, denom: Tensor) -> Tensor:
     return num / denom
 
 
-def compute_metrics(preds: Tensor, target: Tensor) -> Dict[str, Tensor]:
+def compute_metrics(preds: Tensor, target: Tensor) -> Dict[str, float]:
     true_pred = target == preds
     false_pred = target != preds
     pos_pred = preds == 1
@@ -30,16 +30,16 @@ def compute_metrics(preds: Tensor, target: Tensor) -> Dict[str, Tensor]:
     f1 = 2 * _safe_divide(precision * recall, precision + recall)
 
     return dict(
-        f1=f1,
-        precision=precision,
-        recall=recall,
-        true_positive=tp,
-        false_positive=fp,
-        false_negative=fn,
+        f1=f1.item(),
+        precision=precision.item(),
+        recall=recall.item(),
+        true_positive=tp.item(),
+        false_positive=fp.item(),
+        false_negative=fn.item(),
     )
 
 
-def true_positive_rate(preds: Tensor, target: Tensor) -> Tensor:
+def true_positive_rate(preds: Tensor, target: Tensor) -> float:
     return compute_metrics(preds, target)["recall"]
 
 

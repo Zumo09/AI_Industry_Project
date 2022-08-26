@@ -2,24 +2,21 @@ from typing import Dict, Optional, Protocol
 from collections import defaultdict
 import os
 
-import torch
 from torch import Tensor
-from torch.nn import Module
-from torch.optim import Optimizer
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import _LRScheduler
 
 import numpy as np
 from tqdm import tqdm
 
-from .models.modutils import save_model
-
 
 class Engine(Protocol):
-    def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         raise NotImplementedError()
 
-    def val_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def val_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
+        raise NotImplementedError()
+
+    def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
         raise NotImplementedError()
 
 
@@ -35,14 +32,10 @@ class Writer(Protocol):
 
 def training_loop(
     *,
-    model: Module,
     engine: Engine,
     num_epochs: int,
     train_dataloader: DataLoader,
     test_dataloader: DataLoader,
-    optimizer: Optimizer,
-    device: torch.device,
-    lr_scheduler: Optional[_LRScheduler] = None,
     writer: Optional[Writer] = None,
     save_path: Optional[str] = None,
 ) -> None:
@@ -50,43 +43,30 @@ def training_loop(
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
 
-    _train_loss = -1
+    _train_loss = np.nan
     _smoothing = 0.8
     _log_step = 0
-    model.to(device)
     for epoch in range(num_epochs):
-        model.train()
-        test_scalars = defaultdict(list)
         for batch in tqdm(train_dataloader, leave=False, desc=f"Train {epoch}"):
-            batch = {k: d.to(device) for k, d in batch.items()}
-            optimizer.zero_grad()
+            rets = engine.train_step(batch)
 
-            rets = engine.train_step(model, batch)
-
-            rets["loss"].backward()
-            optimizer.step()
-
-            if _train_loss < 0:
-                _train_loss = rets["loss"].cpu().item()
+            if _train_loss == np.nan:
+                _train_loss = rets["loss"]
             else:
                 _train_loss *= _smoothing
-                _train_loss += (1 - _smoothing) * rets["loss"].cpu().item()
+                _train_loss += (1 - _smoothing) * rets["loss"]
 
             for tag, val in rets.items():
                 if writer is not None:
-                    writer.add_scalars(tag, {"train": float(val)}, _log_step)
+                    writer.add_scalars(tag, {"train": val}, _log_step)
 
             _log_step += 1
 
-        model.eval()
+        test_scalars = defaultdict(list)
         for batch in tqdm(test_dataloader, leave=False, desc=f"Test {epoch}"):
-            batch = {k: d.to(device) for k, d in batch.items()}
-
-            with torch.no_grad():
-                rets = engine.val_step(model, batch)
-
+            rets = engine.val_step(batch)
             for tag, val in rets.items():
-                test_scalars[tag].append(float(val))
+                test_scalars[tag].append(val)
 
         if writer is not None:
             for tag, val in test_scalars.items():
@@ -94,12 +74,7 @@ def training_loop(
 
         test_loss = np.mean(test_scalars["loss"])
         log_str = f"Epoch {epoch} - train_loss = {_train_loss:.3f} - test_loss = {test_loss:.3f}"
-        if lr_scheduler is not None:
-            lrs = ", ".join(f"{lr:.2e}" for lr in lr_scheduler.get_last_lr())
-            log_str += f" - lr = {lrs}"
-            lr_scheduler.step()
+
+        log_str += engine.end_epoch(epoch, save_path)
 
         print(log_str)
-
-        if save_path is not None:
-            save_model(model, os.path.join(save_path, f"model_{epoch}.pth"))

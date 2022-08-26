@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Optional
 import random
 
@@ -5,11 +6,14 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Module
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
 
 import numpy as np
 
 from common.data import NUM_FEATURES
 from common import metrics
+from common.models.modutils import save_model
 
 
 def get_masks(horizon: int, n_masks: int) -> torch.Tensor:
@@ -44,7 +48,7 @@ def reconstruction_error(
     elif loss_type == "l1":
         return F.l1_loss(preds, targets, reduction="mean")
     else:
-        raise ValueError(f"{loss_type} not in [mse, l1]")
+        raise ValueError(f"{loss_type} not in ['mse', 'l1']")
 
 
 def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
@@ -55,59 +59,84 @@ def residual_error(preds: Tensor, targets: Tensor) -> Tensor:
 class DeepFIBEngine:
     def __init__(
         self,
+        model: Module,
         anomaly_threshold: float,
+        device: Optional[torch.device] = None,
         masks: Optional[Tensor] = None,
         mask_value: int = -1,
         loss_type: str = "l1",
+        optimizer: Optional[Optimizer] = None,
+        lr_scheduler: Optional[_LRScheduler] = None,
     ):
+        self.device = device or torch.device("cpu")
+        self.model = model.to(self.device)
         self.anomaly_threshold = anomaly_threshold
         self.masks = masks
         self.mask_value = mask_value
         self.loss_type = loss_type
+        self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
 
-    def train_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        assert self.masks is not None, "Masks not initializes. Engine can't train'"
-        model.train()
-        inputs = batch["data"]
+    def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
+        assert self.optimizer is not None, "Optimizer is None. Engine can't train'"
+        assert self.masks is not None, "Masks are None. Engine can't train'"
+        self.model.train()
+        self.optimizer.zero_grad()
+
+        inputs = batch["data"].to(self.device)
         batch_size = len(inputs)
         sample_masks = torch.stack(random.choices(self.masks, k=batch_size))
 
         targets = inputs.detach().clone()
         inputs[sample_masks == 0] = self.mask_value
 
-        preds = model(inputs)
+        preds = self.model(inputs)
 
         loss = reconstruction_error(preds, targets, self.loss_type)
+        loss.backward()
+        self.optimizer.step()
 
-        return dict(loss=loss)
+        return dict(loss=loss.item())
+
+    def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
+        log_str = ""
+        if self.lr_scheduler is not None:
+            lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
+            log_str += f" - lr = {lrs}"
+            self.lr_scheduler.step()
+
+        if save_path is not None:
+            sp = os.path.join(save_path, f"model_{epoch}.pth")
+            save_model(self.model, sp)
+
+        return log_str
 
     @torch.no_grad()
-    def val_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        model.eval()
-        inputs = batch["data"]
+    def val_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
+        self.model.eval()
+        inputs = batch["data"].to(self.device)
+        gt_labels = batch["label"].to(self.device)
         targets = inputs.detach().clone()
-        gt_labels = batch["label"]
 
-        preds = model(inputs)
+        preds = self.model(inputs)
 
         errors = residual_error(preds, targets)
-        # mre = errors.mean() mre == loss!!!
-        labels = (errors > self.anomaly_threshold).to(torch.int)
         loss = reconstruction_error(preds, targets, self.loss_type)
+
+        labels = (errors > self.anomaly_threshold).to(torch.int)
         met = metrics.compute_metrics(labels.flatten(), gt_labels.flatten())
-        met.update(dict(loss=loss))
+        met.update(dict(loss=loss.item()))
         return met
 
-    @torch.no_grad()
-    def test_step(self, model: Module, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        model.eval()
-        inputs = batch["data"]
+    # @torch.no_grad()
+    # def predict(self, inputs: Tensor) -> Dict[str, Tensor]:
+    #     inputs = inputs.to(self.device)
+    #     targets = inputs.detach().clone()
 
-        targets = inputs.detach().clone()
+    #     self.model.eval()
+    #     preds = self.model(inputs)
 
-        preds = model(inputs)
+    #     errors = residual_error(preds, targets)
+    #     labels = (errors.detach() > self.anomaly_threshold).to(torch.int)
 
-        errors = residual_error(preds, targets)
-        labels = (errors.detach() > self.anomaly_threshold).to(torch.int)
-
-        return dict(errors=errors, labels=labels)
+    #     return dict(errors=errors, labels=labels)
