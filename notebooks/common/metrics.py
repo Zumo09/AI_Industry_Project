@@ -71,12 +71,6 @@ def _fp_fn_curve(y_true, y_score, pos_label=None, sample_weight=None):
     return (fps[sl][::-1], fns[sl][::-1], thresholds[sl][::-1])
 
 
-def average_precision_score(signals: Tensor, labels: Tensor) -> float:
-    return _skm.average_precision_score(
-        labels.cpu().flatten(), signals.cpu().flatten(), pos_label=0
-    )
-
-
 def errors_curve(
     signals: Tensor, labels: Tensor, tolerance: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -95,10 +89,10 @@ def errors_curve(
     return fp, fn, thrs
 
 
-def det_curve(
-    signals: Tensor, labels: Tensor
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    return _skm.det_curve(labels.cpu().flatten(), signals.cpu().flatten(), pos_label=0)
+def average_precision_score(signals: Tensor, labels: Tensor) -> float:
+    return _skm.average_precision_score(
+        labels.cpu().flatten(), signals.cpu().flatten(), pos_label=0
+    )
 
 
 def precision_recall_curve(
@@ -115,42 +109,52 @@ class HPCMetrics:
         self.c_missed = c_missed
         self.tolerance = tolerance
 
-        self.fp = np.array([])
-        self.fn = np.array([])
+        self.false_positives = np.array([])
+        self.false_negatives = np.array([])
+        self.cost = np.array([])
+        self.precision = np.array([])
+        self.recall = np.array([])
+        self.f1_score = np.array([])
         self.thresholds = np.array([])
-
-    @property
-    def cost(self) -> np.ndarray:
-        return self.c_alarm * self.fp + self.c_missed * self.fn
+        self.fitted = False
 
     def fit(self, signals: Tensor, labels: Tensor) -> HPCMetrics:
         fp, fn, th = errors_curve(signals, labels, self.tolerance)
-        self.fp = fp
-        self.fn = fn
+        self.false_positives = fp
+        self.false_negatives = fn
         self.thresholds = th
+
+        fpc = self.c_alarm * self.false_positives
+        fnc = self.c_missed * self.false_negatives
+        self.cost = fpc + fnc
+
+        tp = fn[-1] - fn
+        self.precision = tp / (tp + fp)
+        self.precision[np.isnan(self.precision)] = 0
+        self.recall = tp / tp[-1]
+
+        _pxr = self.precision * self.recall
+        _ppr = self.precision + self.recall
+        self.f1_score = 2 * _pxr / _ppr
+
+        self.fitted = True
         return self
 
     def optimize(self) -> Tuple[float, float]:
+        assert self.fitted
         cost = self.cost
         best_th = self.thresholds[np.argmin(cost)]
         best_cost = np.min(cost)
         return best_th, best_cost
 
     def plot(self, figsize: Tuple[int, int] = (15, 5)) -> None:
-        axes: Tuple[plt.Axes, ...]
-        _, axes = plt.subplots(1, 3, figsize=figsize)  # type: ignore
-        fn_ax, fp_ax, c_ax = axes
-        fn_ax.set_title("False Negatives")
-        fn_ax.plot(self.thresholds, self.fn)
-        fn_ax.set_xlabel("thresholds")
-
-        fp_ax.set_title("False Positives")
-        fp_ax.plot(self.thresholds, self.fp)
-        fp_ax.set_xlabel("thresholds")
-
-        c_ax.set_title(f"Det curve")
-        c_ax.plot(self.thresholds, self.cost)
-        fp_ax.set_xlabel("thresholds")
+        best_th, best_cost = self.optimize()
+        _, ax = plt.subplots(figsize=figsize)
+        ax.set_title("Cost")
+        ax.plot(self.thresholds, self.cost)
+        ax.axvline(best_th)
+        ax.axhline(best_cost)
+        ax.set_xlabel("thresholds")
         plt.show()
 
 
@@ -160,53 +164,35 @@ class HPCMetrics:
 
 
 def plot_errors_curve(
-    signals: Tensor, labels: Tensor, tolerance: int, figsize: Tuple[int, int] = (15, 5)
+    false_positives: np.ndarray,
+    false_negatives: np.ndarray,
+    thresholds: np.ndarray,
+    figsize: Tuple[int, int] = (15, 5),
 ) -> None:
-    fpr, fnr, thresholds = errors_curve(signals, labels, tolerance)
     axes: Tuple[plt.Axes, ...]
     _, axes = plt.subplots(1, 3, figsize=figsize)  # type: ignore
     fn_ax, fp_ax, c_ax = axes
     fn_ax.set_title("False Negatives")
-    fn_ax.plot(thresholds, fnr)
+    fn_ax.plot(thresholds, false_negatives)
     fn_ax.set_xlabel("thresholds")
 
     fp_ax.set_title("False Positives")
-    fp_ax.plot(thresholds, fpr)
+    fp_ax.plot(thresholds, false_positives)
     fp_ax.set_xlabel("thresholds")
 
     c_ax.set_title(f"Det curve")
-    c_ax.plot(fpr, fnr)
-    c_ax.set_ylabel("precision")
-    c_ax.set_xlabel("recall")
-    plt.show()
-
-
-def plot_det_curve(
-    signals: Tensor, labels: Tensor, figsize: Tuple[int, int] = (15, 5)
-) -> None:
-    fpr, fnr, thresholds = det_curve(signals, labels)
-    axes: Tuple[plt.Axes, ...]
-    _, axes = plt.subplots(1, 3, figsize=figsize)  # type: ignore
-    fn_ax, fp_ax, c_ax = axes
-    fn_ax.set_title("FNR")
-    fn_ax.plot(thresholds, fnr)
-    fn_ax.set_xlabel("thresholds")
-
-    fp_ax.set_title("FPR")
-    fp_ax.plot(thresholds, fpr)
-    fp_ax.set_xlabel("thresholds")
-
-    c_ax.set_title(f"Det curve")
-    c_ax.plot(fpr, fnr)
+    c_ax.plot(false_positives, false_negatives)
     c_ax.set_ylabel("precision")
     c_ax.set_xlabel("recall")
     plt.show()
 
 
 def plot_precision_recall_curve(
-    signals: Tensor, labels: Tensor, figsize: Tuple[int, int] = (15, 15)
+    precision: np.ndarray,
+    recall: np.ndarray,
+    thresholds: np.ndarray,
+    figsize: Tuple[int, int] = (15, 15),
 ) -> None:
-    precision, recall, thresholds = precision_recall_curve(signals, labels)
     auc_pr = _skm.auc(recall, precision)
     recall = recall[:-1]
     precision = precision[:-1]
