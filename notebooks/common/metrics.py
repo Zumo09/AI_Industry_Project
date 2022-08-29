@@ -1,7 +1,7 @@
-from typing import Sequence, Tuple
+from __future__ import annotations
+from typing import Tuple
 from torch import Tensor
 import numpy as np
-import pandas as pd
 
 from sklearn import metrics as _skm
 import matplotlib.pyplot as plt
@@ -109,48 +109,54 @@ def precision_recall_curve(
     )
 
 
-def get_errors(signal: pd.Series, labels: pd.Series, thr: float, tolerance: int = 1):
-    pred = signal[signal > thr].index
-    anomalies = labels[labels != 0].index
-
-    fp = set(pred)
-    fn = set(anomalies)
-    for lag in range(-tolerance, tolerance + 1):
-        fp = fp - set(anomalies + lag)
-        fn = fn - set(pred + lag)
-    return fp, fn
-
-
 class HPCMetrics:
-    def __init__(self, c_alarm, c_missed, tolerance):
+    def __init__(self, c_alarm: float, c_missed: float, tolerance: int) -> None:
         self.c_alarm = c_alarm
         self.c_missed = c_missed
         self.tolerance = tolerance
 
-    def cost(self, signal: Tensor, labels: Tensor, thr: float):
-        assert signal.size() == labels.size()
-        if len(signal.size()) == 1:
-            return self._cost(signal, labels, thr)
-        else:
-            # Batched
-            return sum(self._cost(s, l, thr) for s, l in zip(signal, labels)) / len(
-                signal
-            )
+        self.fp = np.array([])
+        self.fn = np.array([])
+        self.thresholds = np.array([])
 
-    def _cost(self, signal: Tensor, labels: Tensor, thr: float):
-        # Obtain signals
-        fp, fn = get_errors(pd.Series(signal), pd.Series(labels), thr, self.tolerance)
+    @property
+    def cost(self) -> np.ndarray:
+        return self.c_alarm * self.fp + self.c_missed * self.fn
 
-        # Compute the cost
-        cost = self.c_alarm * len(fp) + self.c_missed * len(fn)
+    def fit(self, signals: Tensor, labels: Tensor) -> HPCMetrics:
+        fp, fn, th = errors_curve(signals, labels, self.tolerance)
+        self.fp = fp
+        self.fn = fn
+        self.thresholds = th
+        return self
 
-        return cost
-
-    def opt_threshold(self, signal: Tensor, labels: Tensor, th_range: Sequence[float]):
-        costs = [self.cost(signal, labels, th) for th in th_range]
-        best_th = th_range[np.argmin(costs)]
-        best_cost = np.min(costs)
+    def optimize(self) -> Tuple[float, float]:
+        cost = self.cost
+        best_th = self.thresholds[np.argmin(cost)]
+        best_cost = np.min(cost)
         return best_th, best_cost
+
+    def plot(self, figsize: Tuple[int, int] = (15, 5)) -> None:
+        axes: Tuple[plt.Axes, ...]
+        _, axes = plt.subplots(1, 3, figsize=figsize)  # type: ignore
+        fn_ax, fp_ax, c_ax = axes
+        fn_ax.set_title("False Negatives")
+        fn_ax.plot(self.thresholds, self.fn)
+        fn_ax.set_xlabel("thresholds")
+
+        fp_ax.set_title("False Positives")
+        fp_ax.plot(self.thresholds, self.fp)
+        fp_ax.set_xlabel("thresholds")
+
+        c_ax.set_title(f"Det curve")
+        c_ax.plot(self.thresholds, self.cost)
+        fp_ax.set_xlabel("thresholds")
+        plt.show()
+
+
+###################################################
+##                   PLOTS                       ##
+###################################################
 
 
 def plot_errors_curve(
@@ -225,106 +231,3 @@ def plot_precision_recall_curve(
     prc_ax.set_ylabel("precision")
     prc_ax.set_xlabel("recall")
     plt.show()
-
-
-# from typing import Dict, List
-# import torch
-
-# def _safe_divide(num: Tensor, denom: Tensor) -> Tensor:
-#     """prevent zero division."""
-#     denom[denom == 0.0] = 1
-#     return num / denom
-
-
-# def compute_metrics(preds: Tensor, target: Tensor) -> Dict[str, float]:
-#     true_pred = target == preds
-#     false_pred = target != preds
-#     pos_pred = preds == 1
-#     neg_pred = preds == 0
-
-#     tp = (true_pred * pos_pred).sum()
-#     fp = (false_pred * pos_pred).sum()
-#     fn = (false_pred * neg_pred).sum()
-
-#     precision = _safe_divide(tp.float(), tp + fp)
-#     recall = _safe_divide(tp.float(), tp + fn)
-
-#     f1 = 2 * _safe_divide(precision * recall, precision + recall)
-
-#     return dict(
-#         f1=f1.item(),
-#         precision=precision.item(),
-#         recall=recall.item(),
-#         true_positive=tp.item(),
-#         false_positive=fp.item(),
-#         false_negative=fn.item(),
-#     )
-
-
-# def true_positive_rate(preds: Tensor, target: Tensor) -> float:
-#     return compute_metrics(preds, target)["recall"]
-
-# def evaluate_thresholds(
-#     all_signals: Tensor, all_labels: Tensor
-# ) -> Dict[str, List[float]]:
-#     f1 = []
-#     precision = []
-#     recall = []
-#     tp = []
-#     fp = []
-#     fn = []
-#     thresholds = np.arange(all_signals.min(), all_signals.max(), 1e-3)
-#     for at in thresholds:
-#         labels = torch.tensor(all_signals > at, dtype=torch.int8)
-#         metrics = compute_metrics(labels.flatten(), all_labels.flatten())
-#         f1.append(metrics["f1"])
-#         precision.append(metrics["precision"])
-#         recall.append(metrics["recall"])
-#         tp.append(metrics["true_positive"])
-#         fp.append(metrics["false_positive"])
-#         fn.append(metrics["false_negative"])
-
-#     auc_pr = average_precision_score(all_labels, all_signals)
-
-#     return dict(
-#         thresholds=list(thresholds),
-#         f1=f1,
-#         precision=precision,
-#         recall=recall,
-#         true_positive=tp,
-#         false_positive=fp,
-#         false_negative=fn,
-#         auc=[auc_pr],
-#     )
-
-
-# def plot_threshold_metrics(
-#     metrics: Dict[str, List[float]], figsize: Tuple[int, int] = (20, 10)
-# ) -> None:
-#     axes: Tuple[Tuple[plt.Axes, ...], ...]
-#     fig, axes = plt.subplots(2, 3, figsize=figsize)  # type: ignore
-#     axes[0][0].set_title("F1")
-#     axes[0][0].plot(metrics["thresholds"], metrics["f1"])
-#     axes[0][0].set_xlabel("thresholds")
-
-#     axes[0][1].set_title("Precision")
-#     axes[0][1].plot(metrics["thresholds"], metrics["precision"])
-#     axes[0][1].set_xlabel("thresholds")
-
-#     axes[0][2].set_title("Recall")
-#     axes[0][2].plot(metrics["thresholds"], metrics["recall"])
-#     axes[0][2].set_xlabel("thresholds")
-
-#     axes[1][0].set_title("True Positives")
-#     axes[1][0].plot(metrics["thresholds"], metrics["true_positive"])
-#     axes[1][0].set_xlabel("thresholds")
-
-#     axes[1][1].set_title("False Positives")
-#     axes[1][1].plot(metrics["thresholds"], metrics["false_positive"])
-#     axes[1][1].set_xlabel("thresholds")
-
-#     axes[1][2].set_title(f"Precision - Recall (AUC={metrics['auc']})")
-#     axes[1][2].plot(metrics["precision"], metrics["recall"])
-#     axes[1][2].set_xlabel("precision")
-#     axes[1][2].set_xlabel("recall")
-#     plt.show()
