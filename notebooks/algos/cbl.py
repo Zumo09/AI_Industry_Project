@@ -1,5 +1,6 @@
+from functools import reduce
 import os
-from typing import Dict, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -12,14 +13,30 @@ import numpy as np
 
 from common import metrics
 from common.models.modutils import save_model
+from common.models.resnet import ResNet, ResNetFeatures
+
+AugmentFN = Callable[[Tensor], Tensor]
+
+
+def identity() -> AugmentFN:
+    return lambda x: x
+
+
+def left_to_right_flipping(dim: int = 1) -> AugmentFN:
+    return lambda x: x.flip(dim)
+
+
+def pipeline(*augmentations: AugmentFN) -> AugmentFN:
+    return reduce(lambda g, f: lambda x: f(g(x)), augmentations)
 
 
 class CBLEngine:
     def __init__(
         self,
-        model: Module,
+        model: ResNetFeatures,
         device: Optional[torch.device] = None,
         optimizer: Optional[Optimizer] = None,
+        augmentation: Optional[AugmentFN] = None,
         lr_scheduler: Optional[_LRScheduler] = None,
     ):
         self.device = device or torch.device("cpu")
@@ -28,7 +45,15 @@ class CBLEngine:
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
 
-        self.metrics = ["auc"]
+        self.augmentation = augmentation or identity()
+
+        self.loss = lambda x, y: x - y
+        self.metrics = []
+
+    def augment(self, data: Tensor) -> Tuple[Tensor, Tensor]:
+        head_1 = self.augmentation(data.clone())
+        head_2 = self.augmentation(data.clone())
+        return head_1, head_2
 
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         assert self.optimizer is not None, "Optimizer is None. Engine can't train'"
@@ -37,9 +62,12 @@ class CBLEngine:
 
         inputs = batch["data"].to(self.device)
 
-        preds = self.model(inputs)
+        head_1_in, head_2_in = self.augment(inputs)
 
-        loss = self.loss(preds)
+        head_1_out = self.model(head_1_in)
+        head_2_out = self.model(head_2_in)
+
+        loss = self.loss(head_1_out, head_2_out)
         loss.backward()
         self.optimizer.step()
 
@@ -62,13 +90,5 @@ class CBLEngine:
     def val_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         self.model.eval()
         inputs = batch["data"].to(self.device)
-        gt_labels = batch["label"].to(self.device)
-        targets = inputs.detach().clone()
 
-        preds = self.model(inputs)
-
-        errors = residual_error(preds, targets)
-        loss = reconstruction_error(preds, targets, self.loss_type)
-
-        auc = metrics.average_precision_score(errors, gt_labels)
-        return dict(loss=loss.item(), auc=auc)
+        return dict(loss=0)

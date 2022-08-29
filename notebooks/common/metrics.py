@@ -121,10 +121,53 @@ class HPCMetrics:
         self.precision = np.array([])
         self.recall = np.array([])
         self.f1_score = np.array([])
-        self.thresholds = np.array([])
         self.fitted = False
 
     def fit(self, signals: Tensor, labels: Tensor) -> HPCMetrics:
+        fp, fn, th = errors_curve(signals, labels, self.tolerance)
+        self.false_positives = fp
+        self.false_negatives = fn
+        self.thresholds = th
+
+        fpc = self.c_alarm * self.false_positives
+        fnc = self.c_missed * self.false_negatives
+        self.cost = fpc + fnc
+
+        tp = fn[-1] - fn
+        self.precision = _safe_divide(tp, tp + fp)
+        self.recall = tp / tp[-1]
+
+        _pxr = self.precision * self.recall
+        _ppr = self.precision + self.recall
+        self.f1_score = 2 * _safe_divide(_pxr, _ppr)
+
+        self.fitted = True
+        return self
+
+    def optimize(self) -> Tuple[float, float]:
+        assert self.fitted, "Call .fit(...) first"
+        cost = self.cost
+        best_th = self.thresholds[np.argmin(cost)]
+        best_cost = np.min(cost)
+        return best_th, best_cost
+
+
+class HPCMetricsThresholds:
+    def __init__(self, c_alarm: float, c_missed: float, tolerance: int) -> None:
+        self.c_alarm = c_alarm
+        self.c_missed = c_missed
+        self.tolerance = tolerance
+
+        self.false_positives = np.array([])
+        self.false_negatives = np.array([])
+        self.cost = np.array([])
+        self.precision = np.array([])
+        self.recall = np.array([])
+        self.f1_score = np.array([])
+        self.thresholds = np.array([])
+        self.fitted = False
+
+    def fit(self, signals: Tensor, labels: Tensor) -> HPCMetricsThresholds:
         fp, fn, th = errors_curve(signals, labels, self.tolerance)
         self.false_positives = fp
         self.false_negatives = fn
@@ -158,7 +201,7 @@ class HPCMetrics:
 ###################################################
 
 
-def plot_cost(cmodel: HPCMetrics, figsize: Tuple[int, int] = (15, 5)) -> None:
+def plot_cost(cmodel: HPCMetricsThresholds, figsize: Tuple[int, int] = (15, 5)) -> None:
     best_th, best_cost = cmodel.optimize()
     _, ax = plt.subplots(figsize=figsize)
     ax.set_title("Cost")

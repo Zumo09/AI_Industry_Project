@@ -166,7 +166,7 @@ class ResNetFeatures(nn.Module):
         self._norm_layer = norm_layer
 
         if not return_layers:
-            self.nodes = [LAYER_4]
+            self.nodes = [f"layer{len(layers)}"]
         else:
             self.nodes = return_layers
 
@@ -305,7 +305,7 @@ class ResNet(nn.Module):
     ) -> None:
         super().__init__()
         self.features = backbone
-        self.node = f"layer{len(backbone.layers)}"
+        self.node = backbone.nodes[-1]
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         self.fc = nn.Linear(self.features.out_planes, num_classes)
 
