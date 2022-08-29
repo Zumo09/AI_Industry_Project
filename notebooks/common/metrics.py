@@ -71,6 +71,12 @@ def _fp_fn_curve(y_true, y_score, pos_label=None, sample_weight=None):
     return (fps[sl][::-1], fns[sl][::-1], thresholds[sl][::-1])
 
 
+def _safe_divide(num: np.ndarray, den: np.ndarray) -> np.ndarray:
+    res = num / den
+    res[np.isnan(res)] = 0
+    return res
+
+
 def errors_curve(
     signals: Tensor, labels: Tensor, tolerance: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -129,38 +135,38 @@ class HPCMetrics:
         self.cost = fpc + fnc
 
         tp = fn[-1] - fn
-        self.precision = tp / (tp + fp)
-        self.precision[np.isnan(self.precision)] = 0
+        self.precision = _safe_divide(tp, tp + fp)
         self.recall = tp / tp[-1]
 
         _pxr = self.precision * self.recall
         _ppr = self.precision + self.recall
-        self.f1_score = 2 * _pxr / _ppr
+        self.f1_score = 2 * _safe_divide(_pxr, _ppr)
 
         self.fitted = True
         return self
 
     def optimize(self) -> Tuple[float, float]:
-        assert self.fitted
+        assert self.fitted, "Call .fit(...) first"
         cost = self.cost
         best_th = self.thresholds[np.argmin(cost)]
         best_cost = np.min(cost)
         return best_th, best_cost
 
-    def plot(self, figsize: Tuple[int, int] = (15, 5)) -> None:
-        best_th, best_cost = self.optimize()
-        _, ax = plt.subplots(figsize=figsize)
-        ax.set_title("Cost")
-        ax.plot(self.thresholds, self.cost)
-        ax.axvline(best_th)
-        ax.axhline(best_cost)
-        ax.set_xlabel("thresholds")
-        plt.show()
-
 
 ###################################################
 ##                   PLOTS                       ##
 ###################################################
+
+
+def plot_cost(cmodel: HPCMetrics, figsize: Tuple[int, int] = (15, 5)) -> None:
+    best_th, best_cost = cmodel.optimize()
+    _, ax = plt.subplots(figsize=figsize)
+    ax.set_title("Cost")
+    ax.plot(cmodel.thresholds, cmodel.cost)
+    ax.axvline(best_th)
+    ax.axhline(best_cost)
+    ax.set_xlabel("thresholds")
+    plt.show()
 
 
 def plot_errors_curve(
