@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Dict, Optional, Tuple, List
+from pandas._typing import Dtype
 import os
 from functools import partial
 from multiprocessing import Pool
@@ -31,7 +32,7 @@ def get_dataset_paths(dataset_base_path: str) -> List[str]:
 
 
 def read(
-    path: str, scaling: Scaling = Scaling.NONE
+    path: str, scaling: Scaling = Scaling.NONE, dtype: Dtype = "float32"
 ) -> Optional[Tuple[pd.DataFrame, pd.Series]]:
     df = pd.read_parquet(path, engine="pyarrow")
     if len(df.index) == 0:
@@ -47,7 +48,7 @@ def read(
         cols = data.columns
         data[cols] = MinMaxScaler().fit_transform(data[cols])
     return (
-        pd.DataFrame(data.values, index=timestamps, columns=data.columns),
+        pd.DataFrame(data.values, index=timestamps, columns=data.columns, dtype=dtype),
         pd.Series(label.values, index=timestamps),
     )
 

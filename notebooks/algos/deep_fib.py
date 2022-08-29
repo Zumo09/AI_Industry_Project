@@ -76,6 +76,8 @@ class DeepFIBEngine:
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
 
+        self.metrics = ["auc"]
+
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         assert self.optimizer is not None, "Optimizer is None. Engine can't train'"
         assert self.masks is not None, "Masks are None. Engine can't train'"
@@ -122,7 +124,7 @@ class DeepFIBEngine:
         errors = residual_error(preds, targets)
         loss = reconstruction_error(preds, targets, self.loss_type)
 
-        auc = metrics.average_precision_score(gt_labels, errors)
+        auc = metrics.average_precision_score(errors, gt_labels)
         return dict(loss=loss.item(), auc=auc)
 
     @torch.no_grad()

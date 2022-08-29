@@ -10,6 +10,8 @@ from tqdm import tqdm
 
 
 class Engine(Protocol):
+    metrics: List[str]
+
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         raise NotImplementedError()
 
@@ -38,7 +40,6 @@ def training_loop(
     test_dataloader: DataLoader,
     writer: Optional[Writer] = None,
     save_path: Optional[str] = None,
-    print_metrics: List[str] = [],
 ) -> None:
     if save_path is not None:
         if not os.path.isdir(save_path):
@@ -76,7 +77,7 @@ def training_loop(
         test_loss = np.mean(test_scalars["loss"])
         log_str = f"Epoch {epoch} - train_loss = {_train_loss:.3f} - test_loss = {test_loss:.3f}"
 
-        for key in print_metrics:
+        for key in engine.metrics:
             log_str += f" - test_{key}={np.mean(test_scalars[key]):.3f}"
         log_str += engine.end_epoch(epoch, save_path)
 
