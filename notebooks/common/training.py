@@ -2,7 +2,9 @@ from typing import Dict, List, Optional, Protocol
 from collections import defaultdict
 import os
 
+import torch
 from torch import Tensor
+from torch.utils.data import DataLoader
 from torch.utils.data import DataLoader
 
 import numpy as np
@@ -19,6 +21,11 @@ class Engine(Protocol):
         raise NotImplementedError()
 
     def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
+        raise NotImplementedError()
+
+
+class TestEngine(Protocol):
+    def predict(self, inputs: Tensor) -> Tensor:
         raise NotImplementedError()
 
 
@@ -82,3 +89,18 @@ def training_loop(
         log_str += engine.end_epoch(epoch, save_path)
 
         print(log_str)
+
+
+def get_predictions(engine: TestEngine, test_loader: DataLoader):
+    all_errors_ = []
+    all_labels_ = []
+
+    for batch in tqdm(test_loader):
+        errors = engine.predict(batch["data"])
+        all_errors_.append(errors.cpu())
+        all_labels_.append(batch["label"])
+
+    all_errors = torch.concat(all_errors_)
+    all_labels = torch.concat(all_labels_)
+
+    return all_errors, all_labels

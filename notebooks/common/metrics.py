@@ -42,6 +42,15 @@ def errors_curve(
     return fps, fns, thrs
 
 
+def _safe_divide(num: np.ndarray, den: np.ndarray) -> np.ndarray:
+    msk = den == 0
+    den[msk] = 1
+    num[msk] = 0
+    res = num / den
+    res[np.isnan(res)] = 0
+    return res
+
+
 def precision_recall_f1(
     fps: np.ndarray, fns: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -52,21 +61,13 @@ def precision_recall_f1(
     return precision, recall, f1
 
 
-def _safe_divide(num: np.ndarray, den: np.ndarray) -> np.ndarray:
-    msk = den == 0
-    den[msk] = 1
-    num[msk] = 0
-    res = num / den
-    res[np.isnan(res)] = 0
-    return res
-
-
 class HPCMetrics:
     def __init__(self, c_alarm: float, c_missed: float, tolerance: int) -> None:
         self.c_alarm = c_alarm
         self.c_missed = c_missed
         self.tolerance = tolerance
 
+        self.thresholds = np.array([])
         self.false_positives = np.array([])
         self.false_negatives = np.array([])
         self.cost = np.array([])
@@ -95,9 +96,8 @@ class HPCMetrics:
 
     def optimize(self) -> Tuple[float, float]:
         assert self.fitted, "Call .fit(...) first"
-        cost = self.cost
-        best_th = self.thresholds[np.argmin(cost)]
-        best_cost = np.min(cost)
+        best_th = self.thresholds[np.argmin(self.cost)]
+        best_cost = np.min(self.cost)
         return best_th, best_cost
 
 
