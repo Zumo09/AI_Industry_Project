@@ -13,29 +13,28 @@ plt.style.use("ggplot")  # type: ignore
 
 @torch.no_grad()
 def fill_tolerance(labels: Tensor, tolerance: int) -> Tensor:
-    ws = (1, 1, 2 * tolerance + 1)
-    ones = torch.ones(ws, dtype=labels.dtype, device=labels.device)
-    full = F.conv1d(labels.unsqueeze(1), ones, padding="same")
-    full = (full.squeeze(1) > 0).to(labels.dtype)
+    ch = labels.size(1)
+    ws = (ch, 1, 2 * tolerance + 1)
+    ones = torch.ones(ws).to(labels)
+    full = F.conv1d(labels, ones, padding="same", groups=ch)
+    full = (full > 0).to(labels)
     return full
 
 
 def errors_curve(
     y_score: Tensor, y_true: Tensor, tolerance: int, num_thrs: int = 100
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    y_true = y_true.unsqueeze(1)
     y_true_full = fill_tolerance(y_true, tolerance)
 
     mn, mx = y_score.min(), y_score.max()
     step = (mx - mn) / num_thrs
     thrs = np.arange(mn, mx, step)
 
-    fps = []
-    fns = []
-    for th in thrs:
-        preds: Tensor = (y_score > th).to(y_true.dtype)
-        preds_full = fill_tolerance(preds, tolerance)
-        fps.append(((1 - y_true_full) * preds).sum().item())
-        fns.append((y_true * (1 - preds_full)).sum().item())
+    preds = torch.stack([y_score > th for th in thrs], dim=1).to(y_true)
+    preds_full = fill_tolerance(preds, tolerance)
+    fps = ((1 - y_true_full) * preds).sum((0, 2))
+    fns = (y_true * (1 - preds_full)).sum((0, 2))
 
     fps = np.asarray(fps)
     fns = np.asarray(fns)
