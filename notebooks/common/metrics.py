@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 plt.style.use("ggplot")  # type: ignore
 
 
+@torch.no_grad()
 def fill_tolerance(labels: Tensor, tolerance: int) -> Tensor:
     ws = (1, 1, 2 * tolerance + 1)
     ones = torch.ones(ws, dtype=labels.dtype, device=labels.device)
