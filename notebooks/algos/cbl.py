@@ -44,7 +44,7 @@ def crop_and_resize(expantion: float = 2) -> AugmentFN:
     return cr
 
 
-def random(fn: AugmentFN, prob: float = 0.5) -> AugmentFN:
+def random_apply(fn: AugmentFN, prob: float = 0.5) -> AugmentFN:
     return lambda x: fn(x) if np.random.rand() < prob else x
 
 
@@ -141,7 +141,7 @@ class CBLSupervisedEngine:
         self,
         model: DeepLabNet,
         device: torch.device,
-        optimizer: Optional[Optimizer],
+        optimizer: Optional[Optimizer] = None,
         lr_scheduler: Optional[_LRScheduler] = None,
     ):
         self.device = device or torch.device("cpu")
@@ -189,7 +189,7 @@ class CBLSupervisedEngine:
             self.lr_scheduler.step()
 
         if save_path is not None:
-            sp = os.path.join(save_path, f"backbone_{epoch}.pth")
+            sp = os.path.join(save_path, f"model_{epoch}.pth")
             save_model(self.model, sp)
 
         return log_str
