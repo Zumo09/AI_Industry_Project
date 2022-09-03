@@ -152,5 +152,4 @@ class DeepLabNet(nn.Module):
         out: torch.Tensor = self.head(features)
         out = F.interpolate(out, size=input_shape, mode="linear")
 
-        out = torch.sigmoid(out)
         return out.permute(0, 2, 1)

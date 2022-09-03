@@ -79,9 +79,14 @@ class DeepFIBEngine:
         self.cmodel = metrics.default_cmodel()
         self.metrics = ["cost", "threshold"]
 
+    def _get_preds(self, inputs: Tensor) -> Tensor:
+        out = self.model(inputs)
+        out = torch.sigmoid(out)
+        return out
+
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
-        assert self.optimizer is not None, "Optimizer is None. Engine can't train'"
-        assert self.masks is not None, "Masks are None. Engine can't train'"
+        assert self.optimizer is not None, "Optimizer is None. Engine can't train"
+        assert self.masks is not None, "Masks are None. Engine can't train"
         self.model.train()
         self.optimizer.zero_grad()
 
@@ -92,7 +97,7 @@ class DeepFIBEngine:
         targets = inputs.detach().clone()
         inputs[sample_masks == 0] = self.mask_value
 
-        preds = self.model(inputs)
+        preds = self._get_preds(inputs)
 
         loss = reconstruction_error(preds, targets, self.loss_type)
         loss.backward()
@@ -117,15 +122,15 @@ class DeepFIBEngine:
     def val_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         self.model.eval()
         inputs = batch["data"].to(self.device)
-        gt_labels = batch["label"].to(self.device)
+        labels = batch["label"].to(self.device)
         targets = inputs.detach().clone()
 
-        preds = self.model(inputs)
+        preds = self._get_preds(inputs)
 
         errors = residual_error(preds, targets)
         loss = reconstruction_error(preds, targets, self.loss_type)
 
-        thr, cost = self.cmodel.fit(errors, gt_labels).optimize()
+        thr, cost = self.cmodel.fit(errors, labels).optimize()
         return dict(loss=loss.item(), cost=cost, threshold=thr)
 
     @torch.no_grad()
@@ -134,7 +139,7 @@ class DeepFIBEngine:
         targets = inputs.detach().clone()
 
         self.model.eval()
-        preds = self.model(inputs)
+        preds = self._get_preds(inputs)
 
         errors = residual_error(preds, targets)
 
