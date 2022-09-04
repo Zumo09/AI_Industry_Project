@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Protocol
+from typing import Callable, Dict, List, Optional, Protocol, Tuple
 from collections import defaultdict
 import os
 
@@ -91,12 +91,15 @@ def training_loop(
         print(log_str)
 
 
-def get_predictions(engine: TestEngine, test_loader: DataLoader):
+@torch.no_grad()
+def get_predictions(
+    prediction_fn: Callable[[Tensor], Tensor], test_loader: DataLoader
+) -> Tuple[Tensor, Tensor]:
     all_errors_ = []
     all_labels_ = []
 
     for batch in tqdm(test_loader):
-        errors = engine.predict(batch["data"])
+        errors = prediction_fn(batch["data"])
         all_errors_.append(errors.cpu())
         all_labels_.append(batch["label"])
 

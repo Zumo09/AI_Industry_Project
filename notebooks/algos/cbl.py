@@ -52,14 +52,20 @@ def pipeline(*augmentations: AugmentFN) -> AugmentFN:
     return reduce(lambda g, f: lambda x: f(g(x)), augmentations)
 
 
-class SimContrastiveLoss(torch.nn.Module):
-    def __init__(self, temperature: float = 0.5) -> None:
+class ContrastiveLoss(torch.nn.Module):
+    def __init__(self, temperature=0.5):
         super().__init__()
-        self.temperature = temperature
+        self.temperature = torch.tensor(temperature)
 
     def forward(self, feats: Tensor) -> Tensor:
-        # Calculate cosine similarity
-        cos_sim = F.cosine_similarity(feats[:, None, :], feats[None, :, :], dim=-1)
+        """
+        feats is batches of embeddings, where indices at distance batchsize//2 are pairs
+        z_i, z_j as per SimCLR paper
+        """
+        # Compute pairwise cosine similarity on time dimention
+        cos_sim = F.cosine_similarity(feats[:, None, :], feats[None, :, :], dim=-2)
+        # Mean value over channels
+        cos_sim = cos_sim.mean(-1)
         # Mask out cosine similarity to itself
         self_mask = torch.eye(cos_sim.shape[0], dtype=torch.bool, device=cos_sim.device)
         cos_sim.masked_fill_(self_mask, -9e15)
@@ -68,8 +74,7 @@ class SimContrastiveLoss(torch.nn.Module):
         # InfoNCE loss
         cos_sim = cos_sim / self.temperature
         nll = -cos_sim[pos_mask] + torch.logsumexp(cos_sim, dim=-1)
-        nll = nll.mean()
-        return nll
+        return nll.mean()
 
 
 class CBLFeatsEngine:
@@ -92,7 +97,7 @@ class CBLFeatsEngine:
         self.aug_1 = aug_1 or identity()
         self.aug_2 = aug_2 or identity()
 
-        self.loss = SimContrastiveLoss(temperature)
+        self.loss = ContrastiveLoss(temperature)
         self.metrics = []
 
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
@@ -124,15 +129,12 @@ class CBLFeatsEngine:
 
     def _get_loss(self, batch: Dict[str, Tensor]) -> Tensor:
         inputs = batch["data"].to(self.device)
-
         head_1_in = self.aug_1(inputs)
         head_2_in = self.aug_2(inputs)
 
         inputs = torch.concat((head_1_in, head_2_in))
-
         inputs = inputs.permute(0, 2, 1)
-        outs = self.model(inputs)
-
+        outs = self.model(inputs)[self.model.nodes[-1]]
         return self.loss(outs)
 
 
