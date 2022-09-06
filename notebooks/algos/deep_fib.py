@@ -130,7 +130,7 @@ class DeepFIBEngine:
         errors = residual_error(preds, targets)
         loss = reconstruction_error(preds, targets, self.loss_type)
 
-        thr, cost = self.cmodel.fit(errors, labels).optimize()
+        thr, cost = self.cmodel.fit(errors, labels.float()).optimize()
         return dict(loss=loss.item(), cost=cost, threshold=thr)
 
     @torch.no_grad()

@@ -104,6 +104,6 @@ def get_predictions(
         all_labels_.append(batch["label"])
 
     all_errors = torch.concat(all_errors_)
-    all_labels = torch.concat(all_labels_)
+    all_labels = torch.concat(all_labels_).float()
 
     return all_errors, all_labels

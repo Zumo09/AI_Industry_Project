@@ -24,22 +24,28 @@ def fill_tolerance(labels: Tensor, tolerance: int) -> Tensor:
 def errors_curve(
     y_score: Tensor, y_true: Tensor, tolerance: int, num_thrs: int = 100
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    assert y_score.size() == y_true.size()
     y_true = y_true.unsqueeze(1)
     y_true_full = fill_tolerance(y_true, tolerance)
 
-    mn, mx = y_score.min(), y_score.max()
+    mn, mx = y_score.min().item(), y_score.max().item()
     step = (mx - mn) / num_thrs
     thrs = np.arange(mn, mx, step)
 
     preds = torch.stack([y_score > th for th in thrs], dim=1).to(y_true)
     preds_full = fill_tolerance(preds, tolerance)
-    fps = ((1 - y_true_full) * preds).sum((0, 2))
-    fns = (y_true * (1 - preds_full)).sum((0, 2))
+    fps = ((1 - y_true_full) * preds).sum(2).mean(0).cpu().numpy()
+    fns = (y_true * (1 - preds_full)).sum(2).mean(0).cpu().numpy()
 
-    fps = np.asarray(fps)
-    fns = np.asarray(fns)
+    # return fps, fns, thrs
+    first_ind = fns.searchsorted(fns[0], side="right")
+    first_ind = first_ind - 1 if first_ind > 0 else None
+    # stop with false positives zero
+    tps = fps[-1] - fps
+    last_ind = tps.searchsorted(tps[-1]) + 1
+    sl = slice(first_ind, last_ind)
 
-    return fps, fns, thrs
+    return fps[sl], fns[sl], thrs[sl]
 
 
 def _safe_divide(num: np.ndarray, den: np.ndarray) -> np.ndarray:
@@ -56,16 +62,19 @@ def precision_recall_f1(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     tps = fns[-1] - fns
     precision = _safe_divide(tps, tps + fps)
-    recall = tps / tps[0]
+    recall = tps / tps[0] if tps[0] != 0 else tps * 0
     f1 = 2 * _safe_divide(precision * recall, precision + recall)
     return precision, recall, f1
 
 
 class HPCMetrics:
-    def __init__(self, c_alarm: float, c_missed: float, tolerance: int) -> None:
+    def __init__(
+        self, c_alarm: float, c_missed: float, tolerance: int, n_thrs_levels: int = 100
+    ) -> None:
         self.c_alarm = c_alarm
         self.c_missed = c_missed
         self.tolerance = tolerance
+        self.n_ths = n_thrs_levels
 
         self.thresholds = np.array([])
         self.false_positives = np.array([])
@@ -77,7 +86,7 @@ class HPCMetrics:
         self.fitted = False
 
     def fit(self, signals: Tensor, labels: Tensor) -> HPCMetrics:
-        fps, fns, ths = errors_curve(signals, labels, self.tolerance)
+        fps, fns, ths = errors_curve(signals, labels, self.tolerance, self.n_ths)
         self.false_positives = fps
         self.false_negatives = fns
         self.thresholds = ths
@@ -102,7 +111,7 @@ class HPCMetrics:
 
 
 def default_cmodel() -> HPCMetrics:
-    return HPCMetrics(1, 5, 12)
+    return HPCMetrics(1, 5, 12, 100)
 
 
 ###################################################
