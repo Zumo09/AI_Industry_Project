@@ -24,11 +24,6 @@ class Engine(Protocol):
         raise NotImplementedError()
 
 
-class TestEngine(Protocol):
-    def predict(self, inputs: Tensor) -> Tensor:
-        raise NotImplementedError()
-
-
 class Writer(Protocol):
     def add_scalars(
         self,
@@ -95,15 +90,15 @@ def training_loop(
 def get_predictions(
     prediction_fn: Callable[[Tensor], Tensor], test_loader: DataLoader
 ) -> Tuple[Tensor, Tensor]:
-    all_errors_ = []
-    all_labels_ = []
+    scores_ = []
+    labels_ = []
 
     for batch in tqdm(test_loader):
         errors = prediction_fn(batch["data"])
-        all_errors_.append(errors.cpu())
-        all_labels_.append(batch["label"])
+        scores_.append(errors.cpu())
+        labels_.append(batch["label"])
 
-    all_errors = torch.concat(all_errors_)
-    all_labels = torch.concat(all_labels_).float()
+    scores = torch.concat(scores_)
+    labels = torch.concat(labels_).float()
 
-    return all_errors, all_labels
+    return scores, labels
