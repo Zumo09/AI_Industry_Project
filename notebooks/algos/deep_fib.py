@@ -62,7 +62,7 @@ class DeepFIBEngine:
         model: Module,
         device: Optional[torch.device] = None,
         masks: Optional[Tensor] = None,
-        mask_value: int = -1,
+        mask_value: Optional[float] = None,
         loss_type: str = "l1",
         optimizer: Optional[Optimizer] = None,
         lr_scheduler: Optional[_LRScheduler] = None,
@@ -81,7 +81,7 @@ class DeepFIBEngine:
 
     def _get_preds(self, inputs: Tensor) -> Tensor:
         out = self.model(inputs)
-        out = torch.sigmoid(out)
+        # out = torch.sigmoid(out)
         return out
 
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
@@ -95,7 +95,13 @@ class DeepFIBEngine:
         sample_masks = torch.stack(random.choices(self.masks, k=batch_size))
 
         targets = inputs.detach().clone()
-        inputs[sample_masks == 0] = self.mask_value
+
+        if self.mask_value is not None:
+            inputs[sample_masks == 0] = self.mask_value
+        else:
+            noise = torch.empty_like(inputs).normal_()
+            msk = sample_masks == 0
+            inputs[msk] = noise[msk]
 
         preds = self._get_preds(inputs)
 

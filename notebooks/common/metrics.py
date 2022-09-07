@@ -37,21 +37,21 @@ def errors_curve(
     fps = ((1 - y_true_full) * preds).sum(2).mean(0).cpu().numpy()
     fns = (y_true * (1 - preds_full)).sum(2).mean(0).cpu().numpy()
 
-    # return fps, fns, thrs
-    first_ind = fns.searchsorted(fns[0], side="right")
-    first_ind = first_ind - 1 if first_ind > 0 else None
-    # stop with false positives zero
-    tps = fps[-1] - fps
-    last_ind = tps.searchsorted(tps[-1]) + 1
-    sl = slice(first_ind, last_ind)
+    return fps, fns, thrs
+    # first_ind = fns.searchsorted(fns[0], side="right")
+    # first_ind = first_ind - 1 if 0 < first_ind < num_thrs else None
+    # # stop with false positives zero
+    # tps = fps[-1] - fps
+    # last_ind = tps.searchsorted(tps[-1]) + 1
+    # sl = slice(first_ind, last_ind)
 
-    return fps[sl], fns[sl], thrs[sl]
+    # return fps[sl], fns[sl], thrs[sl]
 
 
 def _safe_divide(num: np.ndarray, den: np.ndarray) -> np.ndarray:
     msk = den == 0
-    den[msk] = 1
-    num[msk] = 0
+    den[msk] = 9e-15
+    # num[msk] = 0
     res = num / den
     res[np.isnan(res)] = 0
     return res
@@ -80,9 +80,9 @@ class HPCMetrics:
         self.false_positives = np.array([])
         self.false_negatives = np.array([])
         self.cost = np.array([])
-        self.precision = np.array([])
-        self.recall = np.array([])
-        self.f1_score = np.array([])
+        # self.precision = np.array([])
+        # self.recall = np.array([])
+        # self.f1_score = np.array([])
         self.fitted = False
 
     def fit(self, signals: Tensor, labels: Tensor) -> HPCMetrics:
@@ -95,10 +95,10 @@ class HPCMetrics:
         fnc = self.c_missed * self.false_negatives
         self.cost = fpc + fnc
 
-        pr, rc, f1 = precision_recall_f1(fps, fns)
-        self.precision = pr
-        self.recall = rc
-        self.f1_score = f1
+        # pr, rc, f1 = precision_recall_f1(fps, fns)
+        # self.precision = pr
+        # self.recall = rc
+        # self.f1_score = f1
 
         self.fitted = True
         return self
@@ -161,6 +161,10 @@ def plot_precision_recall_f1_curve(
     thresholds: np.ndarray,
     figsize: Tuple[int, int] = (15, 15),
 ) -> None:
+    # precision = precision[:-1]
+    # recall = recall[:-1]
+    # f1 = f1[:-1]
+    # thresholds = thresholds[:-1]
     auc_pr = auc(recall, precision)
     # axes: Tuple[Tuple[plt.Axes, ...], ...]
     _, axes = plt.subplots(2, 2, figsize=figsize)  # type: ignore
