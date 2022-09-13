@@ -27,7 +27,10 @@ class SupervisedEngine:
 
         self.loss = torch.nn.BCEWithLogitsLoss()
         self.cmodel = metrics.default_cmodel()
-        self.metrics = ["cost", "threshold"]
+        self.metrics = []
+
+        self._scores = []
+        self._labels = []
 
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         assert self.optimizer is not None, "Optimizer is None. Engine can't train"
@@ -53,11 +56,17 @@ class SupervisedEngine:
         outs = self.model(inputs).squeeze(-1)
         loss = self.loss(outs, labels)
 
-        thr, cost = self.cmodel.fit(outs, labels).optimize()
-        return dict(loss=loss.item(), cost=cost, threshold=thr)
+        self._scores.append(outs.cpu())
+        self._labels.append(labels.cpu())
+        return dict(loss=loss.item())
 
     def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
         log_str = ""
+        scores = torch.concat(self._scores)
+        labels = torch.concat(self._labels)
+
+        cost, thr = self.cmodel.fit(scores, labels).optimize()
+
         if self.lr_scheduler is not None:
             lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
             log_str += f" - lr = {lrs}"
