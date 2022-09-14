@@ -79,7 +79,8 @@ class SupervisedEngine:
         return log_str
 
     @torch.no_grad()
-    def predict(self, inputs: Tensor) -> Tensor:
+    def predict(self, batch: Dict[str, Tensor]) -> Tensor:
+        inputs = batch["data"]
         inputs = inputs.to(self.device)
         self.model.eval()
         outs = self.model(inputs)

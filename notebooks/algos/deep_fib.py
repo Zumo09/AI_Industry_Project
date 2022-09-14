@@ -140,7 +140,8 @@ class DeepFIBEngine:
         return dict(loss=loss.item(), cost=cost, threshold=thr)
 
     @torch.no_grad()
-    def predict(self, inputs: Tensor) -> Tensor:
+    def predict(self, batch: Dict[str, Tensor]) -> Tensor:
+        inputs = batch["data"]
         inputs = inputs.to(self.device)
         targets = inputs.detach().clone()
 

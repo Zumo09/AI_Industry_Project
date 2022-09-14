@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List
+from typing import List, Optional, Tuple
 
 from .resnet import ResNetFeatures
 
@@ -132,6 +132,7 @@ class DeepLabNet(nn.Module):
         backbone: ResNetFeatures,
         backbone_channels: List[int],
         out_feats: int,
+        out_shape: Optional[Tuple[int, ...]] = None,
     ) -> None:
         super().__init__()
         self.backbone = backbone
@@ -142,14 +143,15 @@ class DeepLabNet(nn.Module):
             backbone.nodes[0],
             backbone.nodes[1],
         )
+        self.out_shape = out_shape
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.permute(0, 2, 1)
-        input_shape = x.shape[2:]
+        out_shape = self.out_shape or x.shape[2:]
 
         features = self.backbone(x)
 
         out: torch.Tensor = self.head(features)
-        out = F.interpolate(out, size=input_shape, mode="linear")
+        out = F.interpolate(out, size=out_shape, mode="linear")
 
         return out.permute(0, 2, 1)

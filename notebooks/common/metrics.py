@@ -25,7 +25,7 @@ def errors_curve(
     y_score: Tensor, y_true: Tensor, tolerance: int, num_thrs: int = 100
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     assert y_score.size() == y_true.size()
-    y_true = y_true.unsqueeze(1)
+    y_true = y_true.unsqueeze(1).float()
     y_true_full = fill_tolerance(y_true, tolerance)
 
     mn, mx = y_score.min().item(), y_score.max().item()

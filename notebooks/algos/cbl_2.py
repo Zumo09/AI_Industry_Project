@@ -1,6 +1,5 @@
 from functools import reduce
 import os
-from turtle import forward
 from typing import Callable, Dict, Optional
 
 import torch
@@ -25,16 +24,21 @@ def left_to_right_flipping(dim: int = 1) -> AugmentFN:
     return lambda x: x.flip(dim)
 
 
-def crop_and_resize(expantion: float = 2) -> AugmentFN:
-    if expantion < 1:
-        raise ValueError(f"Expantion must be >= 1, got {expantion}")
+def crop_and_resize(expantion_min: float = 1.5, expantion_max: float = 2) -> AugmentFN:
+    if expantion_max < expantion_min:
+        raise ValueError(
+            f"Expantion max must be >= Expantion min, got {expantion_min} > {expantion_max}"
+        )
+    if expantion_min <= 1:
+        raise ValueError(f"Expantion minimum must be > 1, got {expantion_min}")
 
     def cr(x: Tensor) -> Tensor:
         x = x.permute(0, 2, 1)
         in_len = x.shape[2]
+        expantion = torch.empty(1).uniform_(expantion_min, expantion_max).item()
         size = int(expantion * in_len)
         x = F.interpolate(x, size=size, mode="linear")
-        start_col = torch.randint(0, in_len, (1,)).item()
+        start_col = torch.randint(0, size - in_len, (1,)).item()
         end_col = start_col + in_len
         x = x[:, :, start_col:end_col]
         x = x.permute(0, 2, 1)

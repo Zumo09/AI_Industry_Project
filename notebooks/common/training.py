@@ -88,13 +88,13 @@ def training_loop(
 
 @torch.no_grad()
 def get_predictions(
-    prediction_fn: Callable[[Tensor], Tensor], test_loader: DataLoader
+    prediction_fn: Callable[[Dict[str, Tensor]], Tensor], test_loader: DataLoader
 ) -> Tuple[Tensor, Tensor]:
     scores_ = []
     labels_ = []
 
     for batch in tqdm(test_loader):
-        errors = prediction_fn(batch["data"])
+        errors = prediction_fn(batch)
         scores_.append(errors.cpu())
         labels_.append(batch["label"])
 

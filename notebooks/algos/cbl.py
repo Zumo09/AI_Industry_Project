@@ -33,7 +33,7 @@ def crop_and_resize(expantion: float = 2) -> AugmentFN:
         in_len = x.shape[2]
         size = int(expantion * in_len)
         x = F.interpolate(x, size=size, mode="linear")
-        start_col = torch.randint(0, in_len, (1,)).item()
+        start_col = torch.randint(0, size - in_len, (1,)).item()
         end_col = start_col + in_len
         x = x[:, :, start_col:end_col]
         x = x.permute(0, 2, 1)
