@@ -34,8 +34,10 @@ def errors_curve(
 
     preds = torch.stack([y_score > th for th in thrs], dim=1).to(y_true)
     preds_full = fill_tolerance(preds, tolerance)
-    fps = ((1 - y_true_full) * preds).sum(2).mean(0).cpu().numpy()
-    fns = (y_true * (1 - preds_full)).sum(2).mean(0).cpu().numpy()
+    # fps = ((1 - y_true_full) * preds).sum(2).mean(0).cpu().numpy()
+    # fns = (y_true * (1 - preds_full)).sum(2).mean(0).cpu().numpy()
+    fps = ((1 - y_true_full) * preds).mean((0, 2)).cpu().numpy()
+    fns = (y_true * (1 - preds_full)).mean((0, 2)).cpu().numpy()
 
     return fps, fns, thrs
     # first_ind = fns.searchsorted(fns[0], side="right")
