@@ -96,7 +96,6 @@ class CBLFeatsEngine:
         self.aug_2 = aug_2 or identity()
 
         self.loss = ContrastiveLoss(temperature)
-        self.metrics = []
 
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         self.model.train()

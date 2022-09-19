@@ -77,7 +77,9 @@ class DeepFIBEngine:
         self.lr_scheduler = lr_scheduler
 
         self.cmodel = metrics.default_cmodel()
-        self.metrics = ["cost", "threshold"]
+
+        self._scores = []
+        self._labels = []
 
     def _get_preds(self, inputs: Tensor) -> Tensor:
         out = self.model(inputs)
@@ -111,19 +113,6 @@ class DeepFIBEngine:
 
         return dict(loss=loss.item())
 
-    def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
-        log_str = ""
-        if self.lr_scheduler is not None:
-            lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
-            log_str += f" - lr = {lrs}"
-            self.lr_scheduler.step()
-
-        if save_path is not None:
-            sp = os.path.join(save_path, f"model_{epoch}.pth")
-            save_model(self.model, sp)
-
-        return log_str
-
     @torch.no_grad()
     def val_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         self.model.eval()
@@ -136,8 +125,34 @@ class DeepFIBEngine:
         errors = residual_error(preds, targets)
         loss = reconstruction_error(preds, targets, self.loss_type)
 
-        thr, cost = self.cmodel.fit(errors, labels.float()).optimize()
-        return dict(loss=loss.item(), cost=cost, threshold=thr)
+        self._scores.append(errors.cpu().detach())
+        self._labels.append(labels.cpu().detach())
+
+        return dict(loss=loss.item())
+
+    def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
+        log_str = ""
+
+        scores = torch.concat(self._scores)
+        labels = torch.concat(self._labels)
+
+        cost, thr = self.cmodel.fit(scores, labels).optimize()
+
+        self._scores.clear()
+        self._labels.clear()
+
+        log_str += f" - cost = {cost:.3f} - threshold = {thr:.3f}"
+
+        if self.lr_scheduler is not None:
+            lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
+            log_str += f" - lr = {lrs}"
+            self.lr_scheduler.step()
+
+        if save_path is not None:
+            sp = os.path.join(save_path, f"model_{epoch}.pth")
+            save_model(self.model, sp)
+
+        return log_str
 
     @torch.no_grad()
     def predict(self, batch: Dict[str, Tensor]) -> Tensor:

@@ -62,7 +62,9 @@ class TSADEngine:
         self.errors = rmse_errors()
 
         self.cmodel = metrics.default_cmodel()
-        self.metrics = ["cost", "threshold"]
+
+        self._scores = []
+        self._labels = []
 
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         assert self.optimizer is not None, "Optimizer is None. Engine can't train"
@@ -90,20 +92,24 @@ class TSADEngine:
 
         errors = self.errors(outs, target)
 
-        cost, thr = self.cmodel.fit(errors, batch["label"]).optimize()
-        return dict(loss=loss.item(), cost=cost, threshold=thr)
+        self._scores.append(errors.cpu().detach())
+        self._labels.append(batch["label"].cpu().detach())
 
-    @torch.no_grad()
-    def predict(self, batch: Dict[str, Tensor]) -> Tensor:
-        self.model.eval()
-        inputs = batch["data"].to(self.device)
-        target = batch["target"].to(self.device)
-
-        outs = self.model(inputs)
-        return self.errors(outs, target)
+        return dict(loss=loss.item())
 
     def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
         log_str = ""
+
+        scores = torch.concat(self._scores)
+        labels = torch.concat(self._labels)
+
+        cost, thr = self.cmodel.fit(scores, labels).optimize()
+
+        self._scores.clear()
+        self._labels.clear()
+
+        log_str += f" - cost = {cost:.3f} - threshold = {thr:.3f}"
+
         if self.lr_scheduler is not None:
             lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
             log_str += f" - lr = {lrs}"
@@ -114,3 +120,12 @@ class TSADEngine:
             save_model(self.model, sp)
 
         return log_str
+
+    @torch.no_grad()
+    def predict(self, batch: Dict[str, Tensor]) -> Tensor:
+        self.model.eval()
+        inputs = batch["data"].to(self.device)
+        target = batch["target"].to(self.device)
+
+        outs = self.model(inputs)
+        return self.errors(outs, target)

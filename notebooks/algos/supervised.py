@@ -27,7 +27,6 @@ class SupervisedEngine:
 
         self.loss = torch.nn.BCEWithLogitsLoss()
         self.cmodel = metrics.default_cmodel()
-        self.metrics = []
 
         self._scores = []
         self._labels = []
@@ -56,8 +55,9 @@ class SupervisedEngine:
         outs = self.model(inputs).squeeze(-1)
         loss = self.loss(outs, labels)
 
-        self._scores.append(outs.cpu())
-        self._labels.append(labels.cpu())
+        self._scores.append(outs.cpu().detach())
+        self._labels.append(labels.cpu().detach())
+
         return dict(loss=loss.item())
 
     def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
@@ -66,6 +66,11 @@ class SupervisedEngine:
         labels = torch.concat(self._labels)
 
         cost, thr = self.cmodel.fit(scores, labels).optimize()
+
+        self._scores.clear()
+        self._labels.clear()
+
+        log_str += f" - cost = {cost:.3f} - threshold = {thr:.3f}"
 
         if self.lr_scheduler is not None:
             lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
