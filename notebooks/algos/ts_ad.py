@@ -33,8 +33,14 @@ class TSADEDataset(Dataset):
         }
 
 
-def get_errors(outs: Tensor, target: Tensor) -> Tensor:
-    return F.mse_loss(outs, target, reduction="none").mean(-1)
+def rmse_errors():
+    loss = torch.nn.MSELoss(reduction="none")
+    return lambda y, x: torch.sqrt(loss(y, x).mean(-1))
+
+
+def rmse_loss():
+    loss = torch.nn.MSELoss()
+    return lambda y, x: torch.sqrt(loss(y, x))
 
 
 class TSADEngine:
@@ -51,7 +57,9 @@ class TSADEngine:
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
 
-        self.loss = torch.nn.MSELoss()
+        # self.loss = torch.nn.MSELoss()
+        self.loss = rmse_loss()
+        self.errors = rmse_errors()
 
         self.cmodel = metrics.default_cmodel()
         self.metrics = ["cost", "threshold"]
@@ -80,7 +88,7 @@ class TSADEngine:
         outs = self.model(inputs)
         loss = self.loss(outs, target)
 
-        errors = get_errors(outs, target)
+        errors = self.errors(outs, target)
 
         cost, thr = self.cmodel.fit(errors, batch["label"]).optimize()
         return dict(loss=loss.item(), cost=cost, threshold=thr)
@@ -92,7 +100,7 @@ class TSADEngine:
         target = batch["target"].to(self.device)
 
         outs = self.model(inputs)
-        return get_errors(outs, target)
+        return self.errors(outs, target)
 
     def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
         log_str = ""
