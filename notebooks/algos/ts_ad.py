@@ -103,7 +103,7 @@ class TSADEngine:
         scores = torch.concat(self._scores)
         labels = torch.concat(self._labels)
 
-        cost, thr = self.cmodel.fit(scores, labels).optimize()
+        thr, cost = self.cmodel.fit(scores, labels).optimize()
 
         self._scores.clear()
         self._labels.clear()

@@ -135,6 +135,7 @@ class DeepLabNet(nn.Module):
         out_shape: Optional[Tuple[int, ...]] = None,
     ) -> None:
         super().__init__()
+        assert len(backbone.nodes) == 2, "Backbone should return 2 features layers"
         self.backbone = backbone
         self.head = DeepLabHeadV3Plus(
             backbone_channels[0],
