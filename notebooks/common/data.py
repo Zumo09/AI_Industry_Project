@@ -71,7 +71,6 @@ class Marconi100Dataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[pd.DataFrame, pd.Series]:
         return self.data[index]
 
-
 def unfolded_indexes(
     dataset: Marconi100Dataset, horizon: int, stride: int
 ) -> List[Tuple[int, Tuple[int, int]]]:
