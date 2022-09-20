@@ -49,7 +49,13 @@ class STOC:
     
     def __refine_data(self, x: UnfoldedDataset, g, k, gamma):
         kdes = self.__fit_subsets(x, k)
-        # TODO
+        
+        dataloader = DataLoader(x, 1)
+        generator = iter(dataloader)
+        for i in range(len(x)):
+            sample = next(generator)
+            for kde in kdes:
+                # TODO
         return
      
     def __split_dataset(self, x: data.UnfoldedDataset, k: int) -> List:
