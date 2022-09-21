@@ -22,7 +22,7 @@ class STOC:
         self,
         # should be the entire dataset
         dataset: UnfoldedDataset,
-        feature_extractor: CBLFeatsEngine,
+        engine: CBLFeatsEngine,
         device: Optional[torch.device] = None,
         k: int,
         gamma: float, 
@@ -44,20 +44,47 @@ class STOC:
             h = gs_kde.best_params_['bandwidth']
             kde = KernelDensity(kernel='gaussian', bandwidth=h)
             kde.fit(data_sub)
-            kdes.append(kde)
+       
+            g = self.engine.get_model
+            thr = self.__find_threshold(kde, g)
+            
+            res = {"kde": kde, "thr": thr}
+            kdes.append(res)
+            
         return kdes
     
-    def __refine_data(self, x: UnfoldedDataset, g, k, gamma):
+    def __indicator_function(sample, kde, g):
+        base_model = kde["kde"]
+        thr = kde["thr"]
+        if base_model(g(sample)) >= thr:
+            return 1
+        return 0
+    
+    def __find_threshold(kde, g):
+        # determine for each kde the best possible threshold as shown in Eq.2
+        # predict the anomalies on the whole dataset to obtain the anomaly distribution
+        # set gamma as 1.5*anomaly distribution (0.5 if anomaly_distribution = 0%)
+        # compute the threshold using the equation
+        return
+    
+    def __refine_data(self, x: UnfoldedDataset, g, k):
         kdes = self.__fit_subsets(x, k)
         
+        new_x = x.detach().clone()
         dataloader = DataLoader(x, 1)
         generator = iter(dataloader)
         for i in range(len(x)):
             sample = next(generator)
             for kde in kdes:
-                # TODO
-        return
-     
+                res = self.__indicator_function(sample, kde, g)
+                if res:
+                    # anomaly, remove sample from dataset
+                    break
+        return new_x
+                         
+    def set_gamma(new_gamma):
+        self.gamma = new_gamma
+                         
     def __split_dataset(self, x: data.UnfoldedDataset, k: int) -> List:
         end = False
         step = 0
