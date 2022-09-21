@@ -16,6 +16,8 @@ from common.models.modutils import save_model
 from sklearn.neighbors import KernelDensity
 from sklearn.model_selection import GridSearchCV
 from algos import cbl
+from tqdm import tqdm
+from torch.utils.data import DataLoader
     
 class STOC:
     def __init__(
@@ -24,13 +26,12 @@ class STOC:
         dataset: UnfoldedDataset,
         engine: CBLFeatsEngine,
         device: Optional[torch.device] = None,
-        k: int,
-        gamma: float, 
+        k: int
     ):
         self.dataset = dataset
         self.device = device or torch.device("cpu")
         self.k = k
-        self.gamma = gamma
+        self.gamma = 0.5 # has to be changed
         
     def __fit_subsets(self, x: UnfoldedDataset, k: int) -> List:
         subsets = self.__split_dataset(x, k)
@@ -44,47 +45,57 @@ class STOC:
             h = gs_kde.best_params_['bandwidth']
             kde = KernelDensity(kernel='gaussian', bandwidth=h)
             kde.fit(data_sub)
-       
+           
             g = self.engine.get_model
-            thr = self.__find_threshold(kde, g)
+            thr = self.__find_threshold(x, kde, g)
             
             res = {"kde": kde, "thr": thr}
             kdes.append(res)
             
         return kdes
     
-    def __indicator_function(sample, kde, g):
+    def __indicator_function(sample, kde, g, thr):
         base_model = kde["kde"]
-        thr = kde["thr"]
         if base_model(g(sample)) >= thr:
             return 1
         return 0
     
-    def __find_threshold(kde, g):
-        # determine for each kde the best possible threshold as shown in Eq.2
+    def __find_threshold(self, x, kde, g):
+        # determine for a given kde the best possible threshold as shown in Eq.2
         # predict the anomalies on the whole dataset to obtain the anomaly distribution
-        # set gamma as 1.5*anomaly distribution (0.5 if anomaly_distribution = 0%)
         # compute the threshold using the equation
-        return
+        score_distr = kde["kde"](g(self.dataset))
+        thr_range = np.linspace(0, 10, 100)
+        
+        thrs_evals = []
+        dataloader = DataLoader(x, 1)
+        generator = iter(dataloader)
+        
+        for thr in thr_range:
+            sum_ = 0
+            for i in range(len(x)):
+                sample = next(generator)
+                sum_ += self.__indicator_function(sample, kde, g, thr)
+            thr_evals.append(sum_/len(x))
+        
+        return max(thr_evals)
     
     def __refine_data(self, x: UnfoldedDataset, g, k):
         kdes = self.__fit_subsets(x, k)
         
         new_x = x.detach().clone()
-        dataloader = DataLoader(x, 1)
+        mask = torch.ones(new_x.shape[0], new_x.shape[1])
+        
+        dataloader = DataLoader(new_x, 1)
         generator = iter(dataloader)
-        for i in range(len(x)):
+        for i in range(len(new_x)):
             sample = next(generator)
             for kde in kdes:
-                res = self.__indicator_function(sample, kde, g)
-                if res:
-                    # anomaly, remove sample from dataset
-                    break
-        return new_x
-                         
-    def set_gamma(new_gamma):
-        self.gamma = new_gamma
-                         
+                if self.__indicator_function(sample, kde, g):
+                    mask[i, :] = 0
+        return new_x[mask != 0]
+    
+    # WORKING
     def __split_dataset(self, x: data.UnfoldedDataset, k: int) -> List:
         end = False
         step = 0
@@ -112,7 +123,7 @@ class STOC:
                     l_bool[idx] = True
                     step += 1
                 subsets.append(l_sub_last)
-                if len(l_sub_last) < 10:
+                if len(l_sub_last) < 100:
                     # if the last sublist is too short merge it with the last one
                     merged_sub = subsets[-2] + subsets[-1]
                     subsets.pop(-1)
@@ -120,4 +131,14 @@ class STOC:
                     subsets.append(merged_sub)
                 end = True
         return subsets
-       
+    
+    def train_step(self, batch: Dict[str, Tensor]):
+        refined_data = self.__refine_data(batch, self.engine.get_model, self.k)
+        data_loader = DataLoader(
+            refined_data,
+            8,
+            shuffle=True,
+        )
+        for b in tqdm(data_loader):
+            cbl = self.engine.get_model
+            rets = cbl.train_step(b)
