@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from functools import reduce
 import os
 from typing import Callable, Dict, Optional
@@ -24,13 +25,18 @@ def left_to_right_flipping(dim: int = 1) -> AugmentFN:
     return lambda x: x.flip(dim)
 
 
-def crop_and_resize(expantion: float = 2) -> AugmentFN:
-    if expantion < 1:
-        raise ValueError(f"Expantion must be >= 1, got {expantion}")
+def crop_and_resize(expantion_min: float = 1.5, expantion_max: float = 2) -> AugmentFN:
+    if expantion_max < expantion_min:
+        raise ValueError(
+            f"Expantion max must be >= Expantion min, got {expantion_min} > {expantion_max}"
+        )
+    if expantion_min <= 1:
+        raise ValueError(f"Expantion minimum must be > 1, got {expantion_min}")
 
     def cr(x: Tensor) -> Tensor:
         x = x.permute(0, 2, 1)
         in_len = x.shape[2]
+        expantion = torch.empty(1).uniform_(expantion_min, expantion_max).item()
         size = int(expantion * in_len)
         x = F.interpolate(x, size=size, mode="linear")
         start_col = torch.randint(0, size - in_len, (1,)).item()
@@ -111,18 +117,18 @@ class CBLFeatsEngine:
         loss = self._get_loss(batch)
         return dict(loss=loss.item())
 
-    def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
-        log_str = ""
+    def end_epoch(self, epoch: int, save_path: Optional[str]) -> Dict[str, str]:
+        log_dict = OrderedDict()
         if self.lr_scheduler is not None:
             lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
-            log_str += f" - lr = {lrs}"
+            log_dict["lr"] = lrs
             self.lr_scheduler.step()
 
         if save_path is not None:
             sp = os.path.join(save_path, f"backbone_{epoch}.pth")
             save_model(self.model, sp)
 
-        return log_str
+        return log_dict
 
     def _get_loss(self, batch: Dict[str, Tensor]) -> Tensor:
         inputs = batch["data"].to(self.device)

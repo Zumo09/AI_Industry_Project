@@ -18,7 +18,7 @@ class Engine(Protocol):
     def val_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:
         raise NotImplementedError()
 
-    def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
+    def end_epoch(self, epoch: int, save_path: Optional[str]) -> Dict[str, str]:
         raise NotImplementedError()
 
 
@@ -74,12 +74,14 @@ def training_loop(
             for tag, val in test_scalars.items():
                 writer.add_scalars(tag, {"test": np.mean(val)}, _log_step)
 
-        log_str = f"Epoch {epoch} - train_loss = {_train_loss:.3f}"
+        log_str = f"Epoch {epoch} - train_loss={_train_loss:.3f}"
 
         for key, value in test_scalars.items():
             log_str += f" - test_{key}={np.mean(value):.3f}"
 
-        log_str += engine.end_epoch(epoch, save_path)
+        log_dict = engine.end_epoch(epoch, save_path)
+        for key, value in log_dict.items():
+            log_str += f" - {key}={value}"
 
         print(log_str)
 

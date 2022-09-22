@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import os
 from typing import Callable, Dict, Optional, Tuple
 import torch
@@ -97,9 +98,8 @@ class TSADEngine:
 
         return dict(loss=loss.item())
 
-    def end_epoch(self, epoch: int, save_path: Optional[str]) -> str:
-        log_str = ""
-
+    def end_epoch(self, epoch: int, save_path: Optional[str]) -> Dict[str, str]:
+        log_dict = OrderedDict()
         scores = torch.concat(self._scores)
         labels = torch.concat(self._labels)
 
@@ -108,18 +108,19 @@ class TSADEngine:
         self._scores.clear()
         self._labels.clear()
 
-        log_str += f" - cost = {cost:.3f} - threshold = {thr:.3f}"
+        log_dict["cost"] = f"{cost:.3f}"
+        log_dict["threshold"] = f"{thr:.3f}"
 
         if self.lr_scheduler is not None:
             lrs = ", ".join(f"{lr:.2e}" for lr in self.lr_scheduler.get_last_lr())
-            log_str += f" - lr = {lrs}"
+            log_dict["lr"] = lrs
             self.lr_scheduler.step()
 
         if save_path is not None:
             sp = os.path.join(save_path, f"model_{epoch}.pth")
             save_model(self.model, sp)
 
-        return log_str
+        return log_dict
 
     @torch.no_grad()
     def predict(self, batch: Dict[str, Tensor]) -> Tensor:
