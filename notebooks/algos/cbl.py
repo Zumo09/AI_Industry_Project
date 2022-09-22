@@ -139,3 +139,6 @@ class CBLFeatsEngine:
         inputs = inputs.permute(0, 2, 1)
         outs = self.model(inputs)[self.model.nodes[-1]]
         return self.loss(outs)
+    
+    def get_model(self):
+        return self.model
