@@ -25,34 +25,52 @@ class STOC:
         # should be the entire dataset
         dataset: UnfoldedDataset,
         engine: CBLFeatsEngine,
-        device: Optional[torch.device] = None,
         k: int
     ):
         self.dataset = dataset
-        self.device = device or torch.device("cpu")
         self.k = k
-        self.gamma = 0.5 # has to be changed
+        self.gamma = 0.05 # has to be changed
+        
+    def __extract_features(self, subset):
+        dataloader = DataLoader(
+            subset,
+            32,
+            shuffle=False,
+            keep_last=True)
+        
+        res = []
+        for batch in dataloader:
+            inputs = batch["data"].to(self.engine.device)
+            inputs = inputs.permute(0, 2, 1)
+            outs = self.engine.model(inputs)[self.engine.model.nodes[-1]]
+            res.append(outs.mean(-1))
+            
+        return torch.concat(res, dim=0).numpy()
         
     def __fit_subsets(self, x: UnfoldedDataset, k: int) -> List:
+        # fit kdes on subsets (features) of the training set
         subsets = self.__split_dataset(x, k)
         kdes = []
+        features_ = []
         
         for sub in subsets:
             data_sub = Subset(x, sub)
+            features = self.__extract_features(data_sub)
+            
             gs_kde = GridSearchCV(KernelDensity(kernel='gaussian'),
                                                 {'bandwidth'=np.linspace(0.01, 0.1, 20)}, cv=5)
-            gs_kde.fit(data_sub)
+            gs_kde.fit(features)
             h = gs_kde.best_params_['bandwidth']
             kde = KernelDensity(kernel='gaussian', bandwidth=h)
-            kde.fit(data_sub)
+            kde.fit(features)
            
-            g = self.engine.get_model
-            thr = self.__find_threshold(x, kde, g)
+            # thr = self.__find_threshold(x, kde, features)
+            # res = {"kde": kde, "thr": thr}
             
-            res = {"kde": kde, "thr": thr}
-            kdes.append(res)
-            
-        return kdes
+            features_.append(features)
+            kdes.append(kde)
+        
+        return kdes, np.concatenate(features)
     
     def __indicator_function(sample, kde, g, thr):
         base_model = kde["kde"]
@@ -60,40 +78,29 @@ class STOC:
             return 1
         return 0
     
-    def __find_threshold(self, x, kde, g):
-        # determine for a given kde the best possible threshold as shown in Eq.2
-        # predict the anomalies on the whole dataset to obtain the anomaly distribution
-        # compute the threshold using the equation
-        score_distr = kde["kde"](g(self.dataset))
-        thr_range = np.linspace(0, 10, 100)
+    def __find_detections(self, kde, features):
+        score_distr = kde["kde"](features)
+        thr_range = np.linspace(min(score_distr), max(score_distr), 100)
         
-        thrs_evals = []
-        dataloader = DataLoader(x, 1)
-        generator = iter(dataloader)
-        
+        detections_max = None
         for thr in thr_range:
-            sum_ = 0
-            for i in range(len(x)):
-                sample = next(generator)
-                sum_ += self.__indicator_function(sample, kde, g, thr)
-            thr_evals.append(sum_/len(x))
-        
-        return max(thr_evals)
+            detections = score_distr >= thr
+            score_mean = detections.mean()
+            if score_mean >= self.gamma:
+                detections_max = detections
+      
+        return detections
     
-    def __refine_data(self, x: UnfoldedDataset, g, k):
-        kdes = self.__fit_subsets(x, k)
+    def __refine_data(self):
+        kdes, features = self.__fit_subsets(self.dataset, self.k)
+        detections = [self.__find_detections(kde, features) for kde in kdes]
         
-        new_x = x.detach().clone()
-        mask = torch.ones(new_x.shape[0], new_x.shape[1])
+        # voting
+        ensemble_output = np.logical_or.reduce(detections)
+        # keep sample only when all kdes vote "False"
+        idxs = np.arange(len(self.dataset))[~ensemble_output]
         
-        dataloader = DataLoader(new_x, 1)
-        generator = iter(dataloader)
-        for i in range(len(new_x)):
-            sample = next(generator)
-            for kde in kdes:
-                if self.__indicator_function(sample, kde, g):
-                    mask[i, :] = 0
-        return new_x[mask != 0]
+        return Subset(self.dataset, idxs)
     
     # WORKING
     def __split_dataset(self, x: data.UnfoldedDataset, k: int) -> List:
@@ -132,13 +139,12 @@ class STOC:
                 end = True
         return subsets
     
-    def train_step(self, batch: Dict[str, Tensor]):
-        refined_data = self.__refine_data(batch, self.engine.get_model, self.k)
+    def train_epoch(self):
+        refined_data = self.__refine_data()
         data_loader = DataLoader(
             refined_data,
             8,
             shuffle=True,
         )
         for b in tqdm(data_loader):
-            cbl = self.engine.get_model
-            rets = cbl.train_step(b)
+            cbl = self.engine.tran_step(b)

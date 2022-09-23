@@ -115,3 +115,10 @@ class UnfoldedDataset(Dataset):
         label_t = torch.tensor(label.to_numpy())[start:end].int()
 
         return {"data": data_t, "label": label_t}
+
+class ClassificationDataset(UnfoldedDataset):
+    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+        ret = super().__getitem__(index)
+        ret["label"] = (ret["label"].sum() > 0).int()
+        
+        return ret
