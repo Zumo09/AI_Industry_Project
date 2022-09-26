@@ -136,9 +136,9 @@ class CBLFeatsEngine:
         head_2_in = self.aug_2(inputs)
 
         inputs = torch.concat((head_1_in, head_2_in))
-        inputs = inputs.permute(0, 2, 1)
-        outs = self.model(inputs)[self.model.nodes[-1]]
+        outs = self._get_outs(inputs)
         return self.loss(outs)
-    
-    def get_model(self):
-        return self.model
+
+    def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
+        inputs = inputs.permute(0, 2, 1)
+        return self.model(inputs)[self.model.nodes[-1]]
