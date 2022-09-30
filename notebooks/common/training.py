@@ -72,7 +72,7 @@ def training_loop(
 
         if writer is not None:
             for tag, val in test_scalars.items():
-                writer.add_scalars(tag, {"test": np.mean(val)}, _log_step)
+                writer.add_scalars(tag, {"test": float(np.mean(val))}, _log_step)
 
         log_str = f"Epoch {epoch} - train_loss={_train_loss:.3f}"
 

@@ -14,6 +14,7 @@ import numpy as np
 from common import metrics
 from common.data import NUM_FEATURES, UnfoldedDataset
 from common.models.modutils import save_model
+from common.training import Writer
 
 from sklearn.neighbors import KernelDensity
 from sklearn.model_selection import GridSearchCV
@@ -53,10 +54,8 @@ class CBLDeepLab(CBLEngine):
 
 
 class STOC:
-    def __init__(self, dataset: UnfoldedDataset, engine: CBLDeepLab, k: int):
-        self.dataset = dataset
-        self.k = k
-        self.gamma = 0.05  # has to be changed
+    def __init__(self, engine: CBLDeepLab, gamma: float = 0.05):
+        self.gamma = gamma  # has to be changed
         self.engine = engine
 
         self.fitted_kde: Optional[KernelDensity] = None
@@ -89,9 +88,8 @@ class STOC:
             detections = score_distr >= thr  # (N, T)
             score_mean = detections.mean()
             if score_mean >= self.gamma:
-                detections_max = np.logical_or.reduce(
-                    detections.T
-                )  # considera Anomaly=True se c'è almeno un timestamp anomalo del sample. Troppo???
+                # considera Anomaly=True se c'è almeno un timestamp anomalo del sample. Troppo???
+                detections_max = np.logical_or.reduce(detections.T)
 
         return detections_max  # (N,)
 
@@ -158,22 +156,40 @@ class STOC:
 
         return kde
 
-    def train_iteration(self, num_epochs: int):
-        refined_data = self._refine_data(self.dataset, self.k)
-        data_loader = DataLoader(
-            refined_data,
-            8,
-            shuffle=True,
-        )
-        for e in range(num_epochs):
-            for b in tqdm(data_loader, desc=f"Epoch {e}"):
-                cbl = self.engine.train_step(b)
+    def fit(
+        self,
+        dataset: UnfoldedDataset,
+        k: int = 5,
+        epochs: List[int] = [1, 1, 1, 1],
+        writer: Optional[Writer] = None,
+        save_path: Optional[str] = None,
+    ) -> None:
+        self.fit_backbone(dataset, k, epochs, writer, save_path)
+        self.fit_kde(dataset, k)
 
-    def fit(self, num_epochs: List[int]):
-        for n in num_epochs:
-            self.train_iteration(n)
+    def fit_backbone(
+        self,
+        dataset: UnfoldedDataset,
+        k: int,
+        epochs: List[int],
+        writer: Optional[Writer] = None,
+        save_path: Optional[str] = None,
+    ):
+        # TODO: Add logging prints and Writer scalars
+        for i, num_epochs in enumerate(epochs):
+            refined_data = self._refine_data(dataset, k)
+            data_loader = DataLoader(
+                refined_data,
+                8,
+                shuffle=True,
+            )
+            for e in range(num_epochs):
+                for b in tqdm(data_loader, desc=f"Iteration {i} - Epoch {e}"):
+                    cbl = self.engine.train_step(b)
+                self.engine.end_epoch(1000 * i + e, save_path)
 
-        refined_data = self._refine_data(self.dataset, self.k)
+    def fit_kde(self, dataset: UnfoldedDataset, k: int) -> None:
+        refined_data = self._refine_data(dataset, k)
         refined_features = self._extract_features(refined_data)
         self.fitted_kde = self._fit_kde(refined_features)
 
