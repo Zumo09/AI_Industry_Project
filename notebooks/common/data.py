@@ -71,6 +71,7 @@ class Marconi100Dataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[pd.DataFrame, pd.Series]:
         return self.data[index]
 
+
 def unfolded_indexes(
     dataset: Marconi100Dataset, horizon: int, stride: int
 ) -> List[Tuple[int, Tuple[int, int]]]:
@@ -115,10 +116,3 @@ class UnfoldedDataset(Dataset):
         label_t = torch.tensor(label.to_numpy())[start:end].int()
 
         return {"data": data_t, "label": label_t}
-
-class ClassificationDataset(UnfoldedDataset):
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        ret = super().__getitem__(index)
-        ret["label"] = (ret["label"].sum() > 0).int()
-        
-        return ret

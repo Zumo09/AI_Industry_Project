@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from collections import OrderedDict
 from functools import reduce
 import os
@@ -81,10 +82,10 @@ class ContrastiveLoss(torch.nn.Module):
         return nll.mean()
 
 
-class CBLFeatsEngine:
+class CBLEngine(ABC):
     def __init__(
         self,
-        model: ResNetFeatures,
+        model: torch.nn.Module,
         optimizer: Optimizer,
         temperature: float = 0.5,
         device: Optional[torch.device] = None,
@@ -139,6 +140,27 @@ class CBLFeatsEngine:
         outs = self._get_outs(inputs)
         return self.loss(outs)
 
+    @abstractmethod
     def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError()
+
+
+class CBLFeatsEngine(CBLEngine):
+    def __init__(
+        self,
+        model: ResNetFeatures,
+        optimizer: Optimizer,
+        temperature: float = 0.5,
+        device: Optional[torch.device] = None,
+        aug_1: Optional[AugmentFN] = None,
+        aug_2: Optional[AugmentFN] = None,
+        lr_scheduler: Optional[_LRScheduler] = None,
+    ):
+        super().__init__(
+            model, optimizer, temperature, device, aug_1, aug_2, lr_scheduler
+        )
+
+    def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
+        assert isinstance(self.model, ResNetFeatures)
         inputs = inputs.permute(0, 2, 1)
         return self.model(inputs)[self.model.nodes[-1]]
