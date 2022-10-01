@@ -84,7 +84,7 @@ class DeepFIBEngine:
 
     def _get_preds(self, inputs: Tensor) -> Tensor:
         out = self.model(inputs)
-        # out = torch.sigmoid(out)
+        out = torch.sigmoid(out)
         return out
 
     def train_step(self, batch: Dict[str, Tensor]) -> Dict[str, float]:

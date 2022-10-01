@@ -149,26 +149,13 @@ class CBLEnginePermute(_CBL):
     def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.model(inputs.permute(0, 2, 1))
 
+
 class CBLEngine(_CBL):
     def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.model(inputs).permute(0, 2, 1)
 
 
 class CBLFeatsEngine(_CBL):
-    def __init__(
-        self,
-        model: ResNetFeatures,
-        optimizer: Optimizer,
-        temperature: float = 0.5,
-        device: Optional[torch.device] = None,
-        aug_1: Optional[AugmentFN] = None,
-        aug_2: Optional[AugmentFN] = None,
-        lr_scheduler: Optional[_LRScheduler] = None,
-    ):
-        super().__init__(
-            model, optimizer, temperature, device, aug_1, aug_2, lr_scheduler
-        )
-
     def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
         assert isinstance(self.model, ResNetFeatures)
         inputs = inputs.permute(0, 2, 1)

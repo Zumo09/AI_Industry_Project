@@ -112,3 +112,25 @@ class SimpleSegConv(nn.Module):
         x = x.permute(0, 2, 1)
 
         return x
+
+
+class SimpleConv(nn.Module):
+    def __init__(
+        self,
+        encoder: Encoder,
+        out_channels: int,
+        out_size: int,
+    ) -> None:
+        super().__init__()
+        self.out_size = out_size
+        self.encoder = encoder
+        self.out_layer = conv1x1(encoder.out_ch, out_channels)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        x: torch.Tensor = inputs.permute(0, 2, 1)
+        x = self.encoder(x)
+        x = F.interpolate(x, size=self.out_size, mode="linear")
+        x = self.out_layer(x)
+        x = x.permute(0, 2, 1)
+
+        return x
