@@ -1,3 +1,5 @@
+from collections import defaultdict
+import os
 from random import random
 from typing import Dict, List, Optional, Tuple
 import torch
@@ -158,35 +160,90 @@ class STOC:
 
     def fit(
         self,
-        dataset: UnfoldedDataset,
+        train_dataset: UnfoldedDataset,
+        val_dataset: UnfoldedDataset,
+        batch_size: int,
         k: int = 5,
         epochs: List[int] = [1, 1, 1, 1],
         writer: Optional[Writer] = None,
         save_path: Optional[str] = None,
     ) -> None:
-        self.fit_backbone(dataset, k, epochs, writer, save_path)
-        self.fit_kde(dataset, k)
+        self.fit_backbone(
+            train_dataset, val_dataset, batch_size, k, epochs, writer, save_path
+        )
+        self.fit_kde(train_dataset, k)
 
     def fit_backbone(
         self,
-        dataset: UnfoldedDataset,
+        train_dataset: UnfoldedDataset,
+        val_dataset: UnfoldedDataset,
+        batch_size: int,
         k: int,
         epochs: List[int],
         writer: Optional[Writer] = None,
         save_path: Optional[str] = None,
     ):
-        # TODO: Add logging prints and Writer scalars
+        test_dataloader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+        )
+        if save_path is not None:
+            if not os.path.isdir(save_path):
+                os.mkdir(save_path)
+
+        _train_loss = np.nan
+        _smoothing = 0.8
+        _log_step = 0
+
         for i, num_epochs in enumerate(epochs):
-            refined_data = self._refine_data(dataset, k)
+            refined_data = self._refine_data(train_dataset, k)
             data_loader = DataLoader(
                 refined_data,
-                8,
+                batch_size=batch_size,
                 shuffle=True,
             )
             for e in range(num_epochs):
-                for b in tqdm(data_loader, desc=f"Iteration {i} - Epoch {e}"):
-                    cbl = self.engine.train_step(b)
-                self.engine.end_epoch(1000 * i + e, save_path)
+                for b in tqdm(
+                    data_loader, desc=f"Train Iteration {i} - Epoch {e}", leave=False
+                ):
+                    rets = self.engine.train_step(b)
+                    if np.isnan(_train_loss):
+                        _train_loss = rets["loss"]
+                    else:
+                        _train_loss *= _smoothing
+                        _train_loss += (1 - _smoothing) * rets["loss"]
+
+                    if writer is not None:
+                        for tag, val in rets.items():
+                            writer.add_scalars(tag, {"train": val}, _log_step)
+
+                    _log_step += 1
+
+                test_scalars = defaultdict(list)
+                for batch in tqdm(
+                    test_dataloader, leave=False, desc=f"Test Iteration {i} - Epoch {e}"
+                ):
+                    rets = self.engine.val_step(batch)
+                    for tag, val in rets.items():
+                        test_scalars[tag].append(val)
+
+                if writer is not None:
+                    for tag, val in test_scalars.items():
+                        writer.add_scalars(
+                            tag, {"test": float(np.mean(val))}, _log_step
+                        )
+
+                log_str = f"Iteration {i} - Epoch {e} - train_loss={_train_loss:.3f}"
+
+                for key, value in test_scalars.items():
+                    log_str += f" - test_{key}={np.mean(value):.3f}"
+
+                log_dict = self.engine.end_epoch(1000 * i + e, save_path)
+                for key, value in log_dict.items():
+                    log_str += f" - {key}={value}"
+
+                print(log_str)
 
     def fit_kde(self, dataset: UnfoldedDataset, k: int) -> None:
         refined_data = self._refine_data(dataset, k)

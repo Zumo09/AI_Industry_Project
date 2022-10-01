@@ -58,8 +58,8 @@ def training_loop(
                 _train_loss *= _smoothing
                 _train_loss += (1 - _smoothing) * rets["loss"]
 
-            for tag, val in rets.items():
-                if writer is not None:
+            if writer is not None:
+                for tag, val in rets.items():
                     writer.add_scalars(tag, {"train": val}, _log_step)
 
             _log_step += 1
