@@ -82,7 +82,7 @@ class ContrastiveLoss(torch.nn.Module):
         return nll.mean()
 
 
-class CBLEngine(ABC):
+class _CBL(ABC):
     def __init__(
         self,
         model: torch.nn.Module,
@@ -145,7 +145,16 @@ class CBLEngine(ABC):
         raise NotImplementedError()
 
 
-class CBLFeatsEngine(CBLEngine):
+class CBLEnginePermute(_CBL):
+    def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.model(inputs.permute(0, 2, 1))
+
+class CBLEngine(_CBL):
+    def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.model(inputs).permute(0, 2, 1)
+
+
+class CBLFeatsEngine(_CBL):
     def __init__(
         self,
         model: ResNetFeatures,

@@ -1,17 +1,14 @@
 from collections import OrderedDict
 import os
-from typing import Callable, Dict, Optional, Tuple
+from typing import Dict, Optional
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
-import numpy as np
 from common.data import UnfoldedDataset, Dataset
 
 from common.models.modutils import save_model
-from common.models.deeplab import DeepLabNet
 
 from common import metrics
 
@@ -47,7 +44,7 @@ def rmse_loss():
 class TSADEngine:
     def __init__(
         self,
-        model: DeepLabNet,
+        model: torch.nn.Module,
         optimizer: Optional[Optimizer] = None,
         device: Optional[torch.device] = None,
         lr_scheduler: Optional[_LRScheduler] = None,

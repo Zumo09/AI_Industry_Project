@@ -9,13 +9,12 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 from common import metrics
 from common.models.modutils import save_model
-from common.models.deeplab import DeepLabNet
 
 
 class SupervisedEngine:
     def __init__(
         self,
-        model: DeepLabNet,
+        model: torch.nn.Module,
         device: torch.device,
         optimizer: Optional[Optimizer] = None,
         lr_scheduler: Optional[_LRScheduler] = None,

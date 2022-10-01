@@ -26,8 +26,6 @@ from torch.utils.data import DataLoader
 
 from .cbl import CBLEngine, AugmentFN
 
-from common.models.deeplab import DeepLabNet
-
 from typing import Dict, Optional
 
 import torch
@@ -36,27 +34,8 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
 
-class CBLDeepLab(CBLEngine):
-    def __init__(
-        self,
-        model: DeepLabNet,
-        optimizer: Optimizer,
-        temperature: float = 0.5,
-        device: Optional[torch.device] = None,
-        aug_1: Optional[AugmentFN] = None,
-        aug_2: Optional[AugmentFN] = None,
-        lr_scheduler: Optional[_LRScheduler] = None,
-    ) -> None:
-        super().__init__(
-            model, optimizer, temperature, device, aug_1, aug_2, lr_scheduler
-        )
-
-    def _get_outs(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.model(inputs).permute(0, 2, 1)
-
-
 class STOC:
-    def __init__(self, engine: CBLDeepLab, gamma: float = 0.05):
+    def __init__(self, engine: CBLEngine, gamma: float = 0.05):
         self.gamma = gamma  # has to be changed
         self.engine = engine
 
