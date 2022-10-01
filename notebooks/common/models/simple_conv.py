@@ -15,7 +15,7 @@ def conv3x3(
         stride=stride,
         padding=dilation,
         groups=groups,
-        bias=False,
+        # bias=False,
         dilation=dilation,
         padding_mode="reflect",
     )
@@ -28,7 +28,7 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv1d:
         out_planes,
         kernel_size=1,
         stride=stride,
-        bias=False,
+        # bias=False,
     )
 
 
