@@ -129,8 +129,8 @@ class SimpleConv(nn.Module):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         x: torch.Tensor = inputs.permute(0, 2, 1)
         x = self.encoder(x)
-        x = F.interpolate(x, size=self.out_size, mode="linear")
         x = self.out_layer(x)
+        x = F.interpolate(x, size=self.out_size, mode="linear")
         x = x.permute(0, 2, 1)
 
         return x

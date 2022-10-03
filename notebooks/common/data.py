@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Dict, Optional, Tuple, List
+import numpy
 from pandas._typing import Dtype
 import os
 from functools import partial
@@ -116,3 +117,41 @@ class UnfoldedDataset(Dataset):
         label_t = torch.tensor(label.to_numpy())[start:end].int()
 
         return {"data": data_t, "label": label_t}
+
+
+class StocDataset(Dataset):
+    def __init__(self, dataset: Marconi100Dataset) -> None:
+        self.dataset = dataset
+        self.lens = [len(dataset[i]) for i in range(len(dataset))]
+        self._len = sum(self.lens)
+        self.cum_len = numpy.cumsum(self.lens)
+
+    def __len__(self) -> int:
+        return self._len
+
+    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+        idx = 0  # max_i s.t. self.cumlen[i] < index
+        df = self.dataset[idx]
+        i = index - self.cum_len[idx]
+
+        return df[i]
+
+
+"""
+Marconi:
+
+1: 0....130000, 2: 0.....1231556, ....., 3: 0......123123
+
+STOC:
+
+1: 0....130000, 2: 130001.....130001 + 1231556, 130001 + 1231556 ..... 130001 + 1231556 + 123123
+
+
+
+
+
+[2, 3, 6, 7, 1]
+
+[2, 5, 11, 18, 19]
+
+"""

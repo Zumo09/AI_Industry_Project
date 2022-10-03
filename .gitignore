@@ -167,3 +167,4 @@ data/
 *.pth
 
 *tfevents*
+notebooks/final.zip

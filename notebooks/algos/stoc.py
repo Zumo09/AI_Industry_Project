@@ -49,7 +49,10 @@ class STOC:
         ensemble_output = np.logical_or.reduce(detections)
 
         # keep sample only when all kdes vote "False"
-        idxs = np.arange(len(dataset))[~ensemble_output]
+        idxs = list(np.arange(len(dataset), dtype=int)[~ensemble_output])
+
+        if len(idxs) == 0:
+            idxs = list(np.arange(len(dataset), dtype=int))
 
         return Subset(dataset, idxs)
 
@@ -61,7 +64,12 @@ class STOC:
         # in pratica 1 detection per ogni sample del dataset
 
         # FEATURES : (N, T, F)
-        score_distr = [kde.score_samples(f) for f in features]  # (N, T)
+        score_distr = np.array(
+            [
+                kde.score_samples(f)
+                for f in tqdm(features, leave=False, desc="score samples")
+            ]
+        )  # (N, T)
         thr_range = np.linspace(min(score_distr), max(score_distr), 100)
 
         detections_max = np.array([False for _ in range(len(features))])
@@ -92,7 +100,7 @@ class STOC:
 
         # restore original ordering
         _features.sort(key=lambda x: x[0])
-        features = [f[0] for f in _features]
+        features = [f[1] for f in _features]
         return kdes, features
 
     @torch.no_grad()
@@ -121,17 +129,21 @@ class STOC:
         cum_lens = np.cumsum([0] + subsets_lens)
         return [idxs[s:e] for s, e in zip(cum_lens[:-1], cum_lens[1:])]
 
-    def _fit_kde(self, features: List[np.ndarray]) -> KernelDensity:
-        gs_kde = GridSearchCV(
-            KernelDensity(kernel="gaussian"),
-            {"bandwidth": np.linspace(0.01, 0.1, 20)},
-            cv=5,
-        )
-
+    def _fit_kde(self, features: List[np.ndarray], cv: int = 0) -> KernelDensity:
         feats = np.concatenate(features)  # (NxT, F)
 
-        gs_kde.fit(feats)
-        h = gs_kde.best_params_["bandwidth"]
+        if cv > 0:
+            gs_kde = GridSearchCV(
+                KernelDensity(kernel="gaussian"),
+                {"bandwidth": np.linspace(0.01, 0.1, 10)},
+                cv=cv,
+            )
+
+            gs_kde.fit(feats)
+            h = gs_kde.best_params_["bandwidth"]
+        else:
+            h = 0.05
+
         kde = KernelDensity(kernel="gaussian", bandwidth=h)
         kde.fit(feats)
 
@@ -227,7 +239,7 @@ class STOC:
     def fit_kde(self, dataset: UnfoldedDataset, k: int) -> None:
         refined_data = self._refine_data(dataset, k)
         refined_features = self._extract_features(refined_data)
-        self.fitted_kde = self._fit_kde(refined_features)
+        self.fitted_kde = self._fit_kde(refined_features, 5)
 
     @torch.no_grad()
     def predict(self, batch: Dict[str, Tensor]) -> Tensor:
