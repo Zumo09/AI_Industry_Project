@@ -157,16 +157,16 @@ class KernelDensityEstimator:
     @torch.no_grad()
     def score_samples(self, x: torch.Tensor) -> torch.Tensor:
         # Load on GPU
-        x.to(self.device)
-        self.train_data.to(self.device)
+        x = x.to(self.device)
+        y = self.train_data.to(self.device)
 
         # Compute
-        score_samples = self.kernel(x, self.train_data)
+        score_samples = self.kernel(x, y)
 
         # Back to cpu
-        x.cpu()
-        self.train_data.cpu()
-        score_samples.cpu()
+        x = x.cpu()
+        y = y.cpu()
+        score_samples = score_samples.cpu()
 
         return score_samples
 
