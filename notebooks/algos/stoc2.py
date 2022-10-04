@@ -17,8 +17,8 @@ from common import metrics
 from common.data import NUM_FEATURES, UnfoldedDataset
 from common.models.modutils import save_model
 from common.training import Writer
+from common.kde import KernelDensity
 
-from sklearn.neighbors import KernelDensity
 from sklearn.model_selection import GridSearchCV
 from algos import cbl
 from tqdm import tqdm
@@ -62,19 +62,19 @@ class STOC:
         return Subset(dataset, idxs)
 
     def _find_detections(
-        self, kde: KernelDensity, features: List[np.ndarray]
+        self, kde: KernelDensity, features: List[torch.Tensor]
     ) -> np.ndarray:
         # TODO: riceve una lista di features, deve predirre lo score distr per ogni sample e usare quel segnale per trovare le anomalie.
         # Bisogna decidere COSA è detection_max in questo caso. pero sicuramente dovrà essere len(detection_max) == len(features),
         # in pratica 1 detection per ogni sample del dataset
 
         # FEATURES : (N, T, F)
-        score_distr = np.array(
+        score_distr = torch.stack(
             [
                 kde.score_samples(f)
                 for f in tqdm(features, leave=False, desc="score samples")
             ]
-        )  # (N, T)
+        ).numpy()  # (N, T)
         thr_range = np.linspace(min(score_distr), max(score_distr), 100)
 
         detections_max = np.array([False for _ in range(len(features))])
@@ -89,7 +89,7 @@ class STOC:
 
     def _fit_subsets(
         self, dataset: UnfoldedDataset, k: int
-    ) -> Tuple[List[KernelDensity], List[np.ndarray]]:
+    ) -> Tuple[List[KernelDensity], List[torch.Tensor]]:
         # fit kdes on subsets (features) of the training set
         subsets = self._split_dataset_indices(len(dataset), k, self.randomize_split)
         kdes = []
@@ -109,14 +109,14 @@ class STOC:
         return kdes, features
 
     @torch.no_grad()
-    def _extract_features(self, subset: Subset) -> List[np.ndarray]:
+    def _extract_features(self, subset: Subset) -> List[torch.Tensor]:
         dataloader = DataLoader(subset, 32, shuffle=False, drop_last=False)
 
         res = []
         for batch in tqdm(dataloader, leave=False, desc="Extracting features"):
             inputs = batch["data"].to(self.engine.device)
             outs = self.engine.model(inputs)
-            res.extend(outs.cpu().numpy())
+            res.extend(outs.cpu())
 
         return res
 
@@ -142,27 +142,9 @@ class STOC:
         cum_lens = np.cumsum([0] + subsets_lens)
         return [idxs[s:e] for s, e in zip(cum_lens[:-1], cum_lens[1:])]
 
-    def _fit_kde(self, features: List[np.ndarray], cv: int = 0) -> KernelDensity:
-        feats = np.concatenate(features)  # (NxT, F)
-
-        if cv > 0:
-            gs_kde = GridSearchCV(
-                KernelDensity(kernel="gaussian"),
-                {"bandwidth": np.linspace(0.01, 0.1, 10)},
-                cv=cv,
-            )
-
-            gs_kde.fit(feats)
-            h = gs_kde.best_params_["bandwidth"]
-        else:
-            # rule of thumb
-            n, d = feats.shape
-            h = (n * (d + 2) / 4.0) ** (-1.0 / (d + 4))
-
-        kde = KernelDensity(kernel="gaussian", bandwidth=h)
-        kde.fit(feats)
-
-        return kde
+    def _fit_kde(self, features: List[torch.Tensor], cv: int = 0) -> KernelDensity:
+        # TODO: Implement cross validation
+        return KernelDensity(features, device=self.engine.device)
 
     def fit(
         self,

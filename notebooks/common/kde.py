@@ -1,7 +1,7 @@
 """Implementation of Kernel Density Estimation (KDE) [1].
 Kernel density estimation is a nonparameteric density estimation method. It works by
 placing kernels K on each point in a "training" dataset D. Then, for a test point x, 
-p(x) is estimated as p(x) = 1 / |D| \sum_{x_i \in D} K(u(x, x_i)), where u is some 
+p(x) is estimated as p(x) = 1 / |D| \\sum_{x_i \\in D} K(u(x, x_i)), where u is some 
 function of x, x_i. In order for p(x) to be a valid probability distribution, the kernel
 K must also be a valid probability distribution.
 References (used throughout the file):
@@ -14,12 +14,11 @@ References (used throughout the file):
 https://github.com/EugenHotaj/pytorch-generative
 """
 
-import abc
+from typing import List, Optional, Union
 
 import numpy as np
 
 import torch
-from torch import nn
 
 
 # class GenerativeModel(abc.ABC, nn.Module):
@@ -93,28 +92,20 @@ from torch import nn
 #         return train_Xs + noise
 
 
-class GaussianKernel(nn.Module):
-    """Implementation of the Gaussian kernel."""
-
-    def __init__(self, bandwidth: float = 1.0):
-        """Initializes a new Kernel.
-        Args:
-            bandwidth: The kernel's (band)width.
-        """
-        super().__init__()
+class GaussianKernel:
+    def __init__(self, bandwidth: float):
         self.bandwidth = torch.tensor(bandwidth)
 
-    def _diffs(self, test_data: torch.Tensor, train_data: torch.Tensor) -> torch.Tensor:
-        """Computes difference between each x in test_data with all train_data."""
-        test_data = test_data.unsqueeze(1)
-        train_data = train_data.unsqueeze(0)
-        return test_data - train_data
-
     @torch.no_grad()
-    def forward(
-        self, test_data: torch.Tensor, train_data: torch.Tensor
-    ) -> torch.Tensor:
-        diffs = self._diffs(test_data, train_data) / self.bandwidth
+    def scores(self, test_data: torch.Tensor, train_data: torch.Tensor) -> torch.Tensor:
+        # TODO(eugenhotaj): This method consumes O(train_data * test_data) memory.
+        # Implement an iterative version instead.
+
+        # Computes difference between each x in test_data with all train_data.
+        x = test_data.unsqueeze(1)
+        y = train_data.unsqueeze(0)
+        diffs = x - y / self.bandwidth
+
         log_exp = -0.5 * torch.norm(diffs, p=2, dim=-1) ** 2  # type: ignore
         z = self._get_z(train_data)
 
@@ -128,40 +119,50 @@ class GaussianKernel(nn.Module):
         z = 0.5 * d * torch.log(2 * pi) + d * torch.log(self.bandwidth) + torch.log(n)
         return z.to(train_data)
 
-    def sample(self, train_data: torch.Tensor) -> torch.Tensor:
-        noise = torch.randn_like(train_data) * self.bandwidth
-        return train_data + noise
+    # def sample(self, train_data: torch.Tensor) -> torch.Tensor:
+    #     noise = torch.randn_like(train_data) * self.bandwidth
+    #     return train_data + noise
 
 
-class KernelDensityEstimator:
+class KernelDensity:
     """The KernelDensityEstimator model."""
 
     def __init__(
-        self, train_data: torch.Tensor, kernel: GaussianKernel, device: torch.device
+        self,
+        train_data: Union[torch.Tensor, List[torch.Tensor]],
+        bandwidth: Optional[float] = None,
+        device: Optional[torch.device] = None,
     ):
         """Initializes a new KernelDensityEstimator.
         Args:
             train_data: The "training" data to use when estimating probabilities.
             kernel: The kernel to place on each of the train_data.
+            default the batdwith is the silverman's rule of thunb
         """
         super().__init__()
-        self.kernel = kernel
-        self.train_data = train_data
+        if isinstance(train_data, list):
+            self.train_data = torch.concat(train_data)
+        else:
+            self.train_data = train_data
         assert len(self.train_data.shape) == 2, "Input cannot have more than two axes."
-
-        self.device = device
         self.train_data.requires_grad = False
 
-    # TODO(eugenhotaj): This method consumes O(train_data * x) memory. Implement an
-    # iterative version instead.
+        n, d = self.train_data.size()
+        h = bandwidth or (n * (d + 2) / 4.0) ** (-1.0 / (d + 4))
+
+        self.kernel = GaussianKernel(bandwidth=h)
+        self.device = device or torch.device("cpu")
+
     @torch.no_grad()
     def score_samples(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.train_data
+
         # Load on GPU
         x = x.to(self.device)
-        y = self.train_data.to(self.device)
+        y = y.to(self.device)
 
         # Compute
-        score_samples = self.kernel(x, y)
+        score_samples = self.kernel.scores(x, y)
 
         # Back to cpu
         x = x.cpu()
@@ -170,6 +171,6 @@ class KernelDensityEstimator:
 
         return score_samples
 
-    def sample(self, n_samples):
-        idx = np.random.choice(range(len(self.train_data)), size=n_samples)
-        return self.kernel.sample(self.train_data[idx])
+    # def sample(self, n_samples):
+    #     idx = np.random.choice(range(len(self.train_data)), size=n_samples)
+    #     return self.kernel.sample(self.train_data[idx])
