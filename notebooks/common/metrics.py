@@ -30,7 +30,7 @@ def errors_curve(
 
     mn, mx = y_score.min().item(), y_score.max().item()
     step = (mx - mn) / num_thrs
-    thrs = np.arange(mn, mx, step)
+    thrs = np.arange(mn - (10 * step), mx + (10 * step), step)
 
     preds = torch.stack([y_score > th for th in thrs], dim=1).to(y_true)
     preds_full = fill_tolerance(preds, tolerance)
