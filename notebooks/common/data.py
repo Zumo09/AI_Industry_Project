@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, Optional, Tuple, List
+from typing import Any, Dict, Optional, Tuple, List
 import numpy
 from pandas._typing import Dtype
 import os
@@ -34,7 +34,7 @@ def get_dataset_paths(dataset_base_path: str) -> List[str]:
 
 def read(
     path: str, scaling: Scaling = Scaling.NONE, dtype: Dtype = "float32"
-) -> Optional[Tuple[pd.DataFrame, pd.Series]]:
+) -> Optional[Tuple[str, pd.DataFrame, pd.Series]]:
     df = pd.read_parquet(path, engine="pyarrow")
     if len(df.index) == 0:
         return None
@@ -49,6 +49,7 @@ def read(
         cols = data.columns
         data[cols] = MinMaxScaler().fit_transform(data[cols])
     return (
+        path,
         pd.DataFrame(data.values, index=timestamps, columns=data.columns, dtype=dtype),
         pd.Series(label.values, index=timestamps),
     )
@@ -69,7 +70,7 @@ class Marconi100Dataset(Dataset):
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, index: int) -> Tuple[pd.DataFrame, pd.Series]:
+    def __getitem__(self, index: int) -> Tuple[str, pd.DataFrame, pd.Series]:
         return self.data[index]
 
 
@@ -86,7 +87,7 @@ def unfolded_indexes(
     """
     indexes = []
     for idx in range(len(dataset)):
-        df, _ = dataset[idx]
+        _, df, _ = dataset[idx]
         length = len(df)
         if length < horizon:
             continue
@@ -110,31 +111,37 @@ class UnfoldedDataset(Dataset):
     def __len__(self) -> int:
         return len(self.indexes)
 
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, index: int) -> Dict[str, Any]:
         df_idx, (start, end) = self.indexes[index]
-        data, label = self.dataset[df_idx]
+        path, data, label = self.dataset[df_idx]
         data_t = torch.tensor(data.to_numpy())[start:end].float()
         label_t = torch.tensor(label.to_numpy())[start:end].int()
 
-        return {"data": data_t, "label": label_t}
+        return {
+            "data": data_t,
+            "label": label_t,
+            "path": path,
+            "start": start,
+            "end": end,
+        }
 
 
-class StocDataset(Dataset):
-    def __init__(self, dataset: Marconi100Dataset) -> None:
-        self.dataset = dataset
-        self.lens = [len(dataset[i]) for i in range(len(dataset))]
-        self._len = sum(self.lens)
-        self.cum_len = numpy.cumsum(self.lens)
+# class StocDataset(Dataset):
+#     def __init__(self, dataset: Marconi100Dataset) -> None:
+#         self.dataset = dataset
+#         self.lens = [len(dataset[i]) for i in range(len(dataset))]
+#         self._len = sum(self.lens)
+#         self.cum_len = numpy.cumsum(self.lens)
 
-    def __len__(self) -> int:
-        return self._len
+#     def __len__(self) -> int:
+#         return self._len
 
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        idx = 0  # max_i s.t. self.cumlen[i] < index
-        df = self.dataset[idx]
-        i = index - self.cum_len[idx]
+#     def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+#         idx = 0  # max_i s.t. self.cumlen[i] < index
+#         df = self.dataset[idx]
+#         i = index - self.cum_len[idx]
 
-        return df[i]
+#         return df[i]
 
 
 """
