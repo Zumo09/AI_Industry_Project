@@ -34,20 +34,11 @@ def errors_curve(
 
     preds = torch.stack([y_score > th for th in thrs], dim=1).to(y_true)
     preds_full = fill_tolerance(preds, tolerance)
-    # fps = ((1 - y_true_full) * preds).sum(2).mean(0).cpu().numpy()
-    # fns = (y_true * (1 - preds_full)).sum(2).mean(0).cpu().numpy()
+
     fps = ((1 - y_true_full) * preds).mean((0, 2)).cpu().numpy()
     fns = (y_true * (1 - preds_full)).mean((0, 2)).cpu().numpy()
 
     return fps, fns, thrs
-    # first_ind = fns.searchsorted(fns[0], side="right")
-    # first_ind = first_ind - 1 if 0 < first_ind < num_thrs else None
-    # # stop with false positives zero
-    # tps = fps[-1] - fps
-    # last_ind = tps.searchsorted(tps[-1]) + 1
-    # sl = slice(first_ind, last_ind)
-
-    # return fps[sl], fns[sl], thrs[sl]
 
 
 def _safe_divide(num: np.ndarray, den: np.ndarray) -> np.ndarray:

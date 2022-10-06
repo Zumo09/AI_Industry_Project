@@ -1,44 +1,27 @@
 from collections import defaultdict
 import os
-from random import random
 from typing import Dict, List, Optional, Tuple
 import torch
-import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Module
-from torch.nn import BCELoss
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import Subset
 
 import numpy as np
 
-from common import metrics
-from common.data import NUM_FEATURES, UnfoldedDataset
-from common.models.modutils import save_model
+from common.data import UnfoldedDataset
 from common.training import Writer
 from common.kde import KernelDensity
 
-from sklearn.model_selection import GridSearchCV
-from algos import cbl
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
-from .cbl import CBLEngine, AugmentFN
-
-from typing import Dict, Optional
-
-import torch
-from torch import Tensor
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import _LRScheduler
+from .cbl import CBLEngine
 
 
 class STOC:
     def __init__(
         self, engine: CBLEngine, gamma: float = 0.05, randomize_split: bool = True
     ):
-        self.gamma = gamma  # has to be changed
+        self.gamma = gamma
         self.engine = engine
         self.randomize_split = randomize_split
         self.fitted_kde: Optional[KernelDensity] = None

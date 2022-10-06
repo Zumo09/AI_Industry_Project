@@ -48,10 +48,6 @@ class GaussianKernel:
         z = 0.5 * d * torch.log(2 * pi) + d * torch.log(self.bandwidth) + torch.log(n)
         return z.to(train_data)
 
-    # def sample(self, train_data: torch.Tensor) -> torch.Tensor:
-    #     noise = torch.randn_like(train_data) * self.bandwidth
-    #     return train_data + noise
-
 
 class KernelDensity:
     """The KernelDensityEstimator model."""
@@ -99,7 +95,3 @@ class KernelDensity:
         score_samples = score_samples.cpu()
 
         return score_samples
-
-    # def sample(self, n_samples):
-    #     idx = np.random.choice(range(len(self.train_data)), size=n_samples)
-    #     return self.kernel.sample(self.train_data[idx])
