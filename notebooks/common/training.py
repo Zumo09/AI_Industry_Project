@@ -95,10 +95,10 @@ def get_predictions(
 
     for batch in tqdm(test_loader):
         errors = prediction_fn(batch)
-        scores_.append(errors.cpu())
+        scores_.append(errors.cpu())  # B x T
         labels_.append(batch["label"])
 
-    scores = torch.concat(scores_)
+    scores = torch.concat(scores_)  # NxB x T
     labels = torch.concat(labels_).float()
 
     return scores, labels
