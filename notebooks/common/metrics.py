@@ -73,9 +73,7 @@ class HPCMetrics:
         self.false_positives = np.array([])
         self.false_negatives = np.array([])
         self.cost = np.array([])
-        # self.precision = np.array([])
-        # self.recall = np.array([])
-        # self.f1_score = np.array([])
+
         self.fitted = False
 
     def fit(self, signals: Tensor, labels: Tensor) -> HPCMetrics:
@@ -87,11 +85,6 @@ class HPCMetrics:
         fpc = self.c_alarm * self.false_positives
         fnc = self.c_missed * self.false_negatives
         self.cost = fpc + fnc
-
-        # pr, rc, f1 = precision_recall_f1(fps, fns)
-        # self.precision = pr
-        # self.recall = rc
-        # self.f1_score = f1
 
         self.fitted = True
         return self
