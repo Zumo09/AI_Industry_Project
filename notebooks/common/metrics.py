@@ -13,6 +13,10 @@ plt.style.use("ggplot")  # type: ignore
 
 @torch.no_grad()
 def fill_tolerance(labels: Tensor, tolerance: int) -> Tensor:
+    """
+    Fill with ones around true elements in labels, with a radius of tolerance
+    labels: size = BatchSize x ThresholdsNumber x TimeSteps
+    """
     ch = labels.size(1)
     ws = (ch, 1, 2 * tolerance + 1)
     ones = torch.ones(ws).to(labels)
@@ -24,6 +28,10 @@ def fill_tolerance(labels: Tensor, tolerance: int) -> Tensor:
 def errors_curve(
     y_score: Tensor, y_true: Tensor, tolerance: int, num_thrs: int = 100
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Computes percentage of false positives and false negatives for 'num_thrs' thresholds
+    sizes of the inputs: BatchSize x TimeSteps
+    """
     assert y_score.size() == y_true.size()
     y_true = y_true.unsqueeze(1).float()
     y_true_full = fill_tolerance(y_true, tolerance)
@@ -44,7 +52,6 @@ def errors_curve(
 def _safe_divide(num: np.ndarray, den: np.ndarray) -> np.ndarray:
     msk = den == 0
     den[msk] = 9e-15
-    # num[msk] = 0
     res = num / den
     res[np.isnan(res)] = 0
     return res
@@ -147,12 +154,7 @@ def plot_precision_recall_f1_curve(
     thresholds: np.ndarray,
     figsize: Tuple[int, int] = (15, 15),
 ) -> None:
-    # precision = precision[:-1]
-    # recall = recall[:-1]
-    # f1 = f1[:-1]
-    # thresholds = thresholds[:-1]
     auc_pr = auc(recall, precision)
-    # axes: Tuple[Tuple[plt.Axes, ...], ...]
     _, axes = plt.subplots(2, 2, figsize=figsize)  # type: ignore
     ((prec_ax, rec_ax), (f1_ax, prc_ax)) = axes
     prec_ax.set_title("Precision")
