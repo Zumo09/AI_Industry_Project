@@ -58,7 +58,7 @@ def pipeline(*augmentations: AugmentFN) -> AugmentFN:
 
 
 class ContrastiveLoss(torch.nn.Module):
-    def __init__(self, temperature=0.5):
+    def __init__(self, temperature: float = 0.5):
         super().__init__()
         self.temperature = torch.tensor(temperature)
 
